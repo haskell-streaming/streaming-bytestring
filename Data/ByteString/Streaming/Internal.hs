@@ -153,6 +153,12 @@ instance (Monoid r, Monad m) => Monoid (ByteString m r) where
   mappend = liftM2 mappend
   {-# INLINE mappend #-}
 
+#if MIN_VERSION_base(4,11,0)
+instance (Monoid (ByteString m r)) => Semigroup (ByteString m r) where
+  (<>) = mappend
+  {-# INLINE (<>) #-}
+#endif
+
 instance (MonadBase b m) => MonadBase b (ByteString m) where
   liftBase  = mwrap . fmap return . liftBase
   {-#INLINE liftBase #-}
