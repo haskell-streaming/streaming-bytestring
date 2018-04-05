@@ -1,7 +1,8 @@
-# Revision history for bytestring-streaming
+## 0.1.6
 
-## 0.1.0.0  -- YYYY-mm-dd
+- `Semigroup` instance for `ByteString m r` added
+- New function `lineSplit`
 
-* First version. 
+## 0.1.5
 
-
+- Update for `streaming-0.2`

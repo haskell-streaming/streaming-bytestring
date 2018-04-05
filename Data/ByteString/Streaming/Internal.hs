@@ -1,9 +1,9 @@
 {-# LANGUAGE CPP, BangPatterns, RankNTypes, GADTs #-}
 {-# LANGUAGE UnliftedFFITypes, MagicHash, UnboxedTuples #-}
-{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, UndecidableInstances #-} 
+{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, UndecidableInstances #-}
 
 module Data.ByteString.Streaming.Internal (
-   ByteString (..) 
+   ByteString (..)
    , consChunk             -- :: S.ByteString -> ByteString m r -> ByteString m r
    , chunkOverhead     -- :: Int
    , defaultChunkSize  -- :: Int
@@ -21,20 +21,20 @@ module Data.ByteString.Streaming.Internal (
    , chunkMapM_
    , unfoldMChunks
    , unfoldrChunks
-   
+
    , packChars
    , smallChunkSize     -- :: Int
    , unpackBytes        -- :: Monad m => ByteString m r -> Stream Word8_ m r
    , packBytes
    , chunk             --  :: ByteString -> ByteString m ()
-   , mwrap 
+   , mwrap
    , unfoldrNE
    , reread
    , inlinePerformIO
    , unsafeLast
    , unsafeInit
    , copy
-   
+
    -- * ResourceT help
    , bracketByteString
   ) where
@@ -51,6 +51,10 @@ import Control.Monad
 import Control.Applicative
 import Control.Monad.Morph
 import Data.Monoid (Monoid(..))
+
+#if __GLASGOW_HASKELL__ < 841
+import Data.Semigroup
+#endif
 
 import qualified Data.ByteString        as S  -- S for strict (hmm...)
 import qualified Data.ByteString.Internal as S
@@ -95,12 +99,12 @@ instance Monad m => Functor (ByteString m) where
 
 instance Monad m => Applicative (ByteString m) where
   pure = Empty
-  {-#INLINE pure #-} 
+  {-#INLINE pure #-}
   bf <*> bx = do {f <- bf; x <- bx; Empty (f x)}
-  {-#INLINE (<*>) #-} 
+  {-#INLINE (<*>) #-}
   (*>) = (>>)
   {-#INLINE (*>) #-}
-  
+
 instance Monad m => Monad (ByteString m) where
   return = Empty
   {-#INLINE return #-}
@@ -115,13 +119,13 @@ instance Monad m => Monad (ByteString m) where
     --   Empty a -> f a
     --   Chunk bs bss -> Chunk bs (bss >>= f)
     --   Go mbss      -> Go (liftM (>>= f) mbss)
-    loop SPEC2 x where -- unlike >> this SPEC seems pointless 
+    loop SPEC2 x where -- unlike >> this SPEC seems pointless
       loop !_ y = case y of
         Empty a -> f a
         Chunk bs bss -> Chunk bs (loop SPEC bss)
         Go mbss      -> Go (liftM (loop SPEC) mbss)
   {-#INLINEABLE (>>=) #-}
-  
+
 instance MonadIO m => MonadIO (ByteString m) where
   liftIO io = Go (liftM Empty (liftIO io))
   {-#INLINE liftIO #-}
@@ -136,35 +140,33 @@ instance MFunctor ByteString where
     Chunk bs' rest -> Chunk bs' (hoist phi rest)
     Go m           -> Go (phi (liftM (hoist phi) m))
   {-#INLINABLE hoist #-}
-  
+
 instance (r ~ ()) => IsString (ByteString m r) where
   fromString = chunk . S.pack . Prelude.map S.c2w
   {-#INLINE fromString #-}
-  
+
 instance (m ~ Identity, Show r) => Show (ByteString m r) where
   show bs0 = case bs0 of  -- the implementation this instance deserves ...
     Empty r           -> "Empty (" ++ show r ++ ")"
     Go (Identity bs') -> "Go (Identity (" ++ show bs' ++ "))"
     Chunk bs'' bs     -> "Chunk " ++ show bs'' ++ " (" ++ show bs ++ ")"
-    
+
+instance (Semigroup r, Monad m) => Semigroup (ByteString m r) where
+  (<>) = liftM2 (<>)
+  {-# INLINE (<>) #-}
+
 instance (Monoid r, Monad m) => Monoid (ByteString m r) where
   mempty = Empty mempty
   {-# INLINE mempty #-}
   mappend = liftM2 mappend
   {-# INLINE mappend #-}
 
-#if MIN_VERSION_base(4,11,0)
-instance (Monoid (ByteString m r)) => Semigroup (ByteString m r) where
-  (<>) = mappend
-  {-# INLINE (<>) #-}
-#endif
-
 instance (MonadBase b m) => MonadBase b (ByteString m) where
   liftBase  = mwrap . fmap return . liftBase
   {-#INLINE liftBase #-}
 
 instance (MonadThrow m) => MonadThrow (ByteString m) where
-  throwM = lift . throwM 
+  throwM = lift . throwM
   {-#INLINE throwM #-}
 
 instance (MonadCatch m) => MonadCatch (ByteString m) where
@@ -175,10 +177,10 @@ instance (MonadCatch m) => MonadCatch (ByteString m) where
       Empty  r       -> Empty r
       Go  m          -> Go (catch (do
           p' <- m
-          return (go p'))  
+          return (go p'))
        (\e -> return (f e)) )
   {-#INLINABLE catch #-}
-     
+
 instance (MonadResource m) => MonadResource (ByteString m) where
   liftResourceT = lift . liftResourceT
   {-#INLINE liftResourceT #-}
@@ -190,7 +192,7 @@ bracketByteString alloc free inside = do
         clean key (inside seed)
   where
     clean key = loop where
-      loop str = case str of 
+      loop str = case str of
         Empty r        -> Go (release key >> return (Empty r))
         Go m           -> Go (liftM loop m)
         Chunk bs rest  -> Chunk bs (loop rest)
@@ -204,7 +206,7 @@ data SPEC = SPEC | SPEC2
 --
 -- | Smart constructor for 'Chunk'.
 consChunk :: S.ByteString -> ByteString m r -> ByteString m r
-consChunk c@(S.PS _ _ len) cs 
+consChunk c@(S.PS _ _ len) cs
   | len == 0  = cs
   | otherwise = Chunk c cs
 {-# INLINE consChunk #-}
@@ -215,9 +217,9 @@ chunk bs = consChunk bs (Empty ())
 {-# INLINE chunk #-}
 
 
-{- | Reconceive an effect that results in an effectful bytestring as an effectful bytestring. 
-    Compare Streaming.mwrap. The closes equivalent of 
-  
+{- | Reconceive an effect that results in an effectful bytestring as an effectful bytestring.
+    Compare Streaming.mwrap. The closes equivalent of
+
 >>> Streaming.wrap :: f (Stream f m r) -> Stream f m r
 
     is here  @consChunk@. @mwrap@ is the smart constructor for the internal @Go@ constructor.
@@ -300,7 +302,7 @@ chunkOverhead = 2 * sizeOf (undefined :: Int)
 -- {-#INLINABLE packBytes' #-}
 
 packBytes :: Monad m => Stream (Of Word8) m r -> ByteString m r
-packBytes cs0 = do 
+packBytes cs0 = do
   (bytes :> rest) <- lift $ SP.toList $ SP.splitAt 32 cs0
   case bytes of
     [] -> case rest of
@@ -314,7 +316,7 @@ packChars :: Monad m => Stream (Of Char) m r -> ByteString m r
 packChars = packBytes . SP.map S.c2w
 {-#INLINABLE packChars #-}
 
-    
+
 
 unpackBytes :: Monad m => ByteString m r ->  Stream (Of Word8) m r
 unpackBytes bss = dematerialize bss
@@ -343,7 +345,7 @@ unpackBytes bss = dematerialize bss
 
 -- copied from Data.ByteString.Unsafe for compatibility with older bytestring
 unsafeLast :: S.ByteString -> Word8
-unsafeLast (S.PS x s l) = 
+unsafeLast (S.PS x s l) =
     accursedUnutterablePerformIO $ withForeignPtr x $ \p -> peekByteOff p (s+l-1)
  where
       accursedUnutterablePerformIO (IO m) = case m realWorld# of (# _, r #) -> r
@@ -373,21 +375,21 @@ foldlChunks f z = go z
         go a (Go m)       = m >>= go a
 {-# INLINABLE foldlChunks #-}
 
-chunkMap :: Monad m => (S.ByteString -> S.ByteString) -> ByteString m r -> ByteString m r 
+chunkMap :: Monad m => (S.ByteString -> S.ByteString) -> ByteString m r -> ByteString m r
 chunkMap f bs = dematerialize bs return (\bs bss -> Chunk (f bs) bss) Go
 {-#INLINE chunkMap #-}
 
-chunkMapM :: Monad m => (S.ByteString -> m S.ByteString) -> ByteString m r -> ByteString m r 
+chunkMapM :: Monad m => (S.ByteString -> m S.ByteString) -> ByteString m r -> ByteString m r
 chunkMapM f bs = dematerialize bs return (\bs bss -> Go (liftM (flip Chunk bss) (f bs))) Go
 {-#INLINE chunkMapM #-}
 
-chunkMapM_ :: Monad m => (S.ByteString -> m x) -> ByteString m r -> m r 
+chunkMapM_ :: Monad m => (S.ByteString -> m x) -> ByteString m r -> m r
 chunkMapM_ f bs = dematerialize bs return (\bs mr -> f bs >> mr) join
 {-#INLINE chunkMapM_ #-}
 
 
-{- | @chunkFold@ is preferable to @foldlChunks@ since it is 
-     an appropriate argument for @Control.Foldl.purely@ which 
+{- | @chunkFold@ is preferable to @foldlChunks@ since it is
+     an appropriate argument for @Control.Foldl.purely@ which
      permits many folds and sinks to be run simulaneously on one bytestream.
 
   -}
@@ -399,15 +401,15 @@ chunkFold step begin done = go begin
         go a (Go m)       = m >>= go a
 {-# INLINABLE chunkFold #-}
 
-{- | @chunkFoldM@ is preferable to @foldlChunksM@ since it is 
+{- | @chunkFoldM@ is preferable to @foldlChunksM@ since it is
      an appropriate argument for @Control.Foldl.impurely@ which
      permits many folds and sinks to be run simulaneously on one bytestream.
 
   -}
 chunkFoldM :: Monad m => (x -> S.ByteString -> m x) -> m x -> (x -> m a) -> ByteString m r -> m (Of a r)
 chunkFoldM step begin done bs = begin >>= go bs
-  where 
-    go str !x = case str of 
+  where
+    go str !x = case str of
       Empty r    -> done x >>= \a -> return (a :> r)
       Chunk c cs -> step x c >>= go cs
       Go m       -> m >>= \str' -> go str' x
@@ -415,11 +417,11 @@ chunkFoldM step begin done bs = begin >>= go bs
 
 foldlChunksM :: Monad m => (a -> S.ByteString -> m a) -> m a -> ByteString m r -> m (Of a r)
 foldlChunksM f z bs = z >>= \a -> go a bs
-  where 
-    go !a str = case str of 
+  where
+    go !a str = case str of
       Empty r    -> return (a :> r)
       Chunk c cs -> f a c >>= \aa -> go aa cs
-      Go m       -> m >>= go a 
+      Go m       -> m >>= go a
 {-# INLINABLE foldlChunksM #-}
 
 
@@ -450,7 +452,7 @@ unfoldMChunks :: Monad m => (s -> m (Maybe (S.ByteString, s))) -> s -> ByteStrin
 unfoldMChunks step = loop where
   loop s = Go $ do
     m <- step s
-    case m of 
+    case m of
       Nothing -> return (Empty ())
       Just (bs,s') -> return $ Chunk bs (loop s')
 {-# INLINABLE unfoldMChunks #-}
@@ -459,7 +461,7 @@ unfoldrChunks :: Monad m => (s -> m (Either r (S.ByteString, s))) -> s -> ByteSt
 unfoldrChunks step = loop where
   loop !s = Go $ do
     m <- step s
-    case m of 
+    case m of
       Left r -> return (Empty r)
       Right (bs,s') -> return $ Chunk bs (loop s')
 {-# INLINABLE unfoldrChunks #-}
@@ -472,16 +474,16 @@ unfoldrChunks step = loop where
 > Q.reread Streams.read             :: InputStream S.ByteString -> Q.ByteString IO ()
 > Q.reread (liftIO . Streams.read)  :: MonadIO m => InputStream S.ByteString -> Q.ByteString m ()
 
-The other direction here is 
+The other direction here is
 
 > Streams.unfoldM Q.unconsChunk     :: Q.ByteString IO r -> IO (InputStream S.ByteString)
 
   -}
 reread :: Monad m => (s -> m (Maybe S.ByteString)) -> s -> ByteString m ()
-reread step s = loop where 
-  loop = Go $ do 
+reread step s = loop where
+  loop = Go $ do
     m <- step s
-    case m of 
+    case m of
       Nothing -> return (Empty ())
       Just a  -> return (Chunk a loop)
 {-# INLINEABLE reread #-}

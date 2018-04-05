@@ -12,7 +12,6 @@ cabal-dev
 .cabal-sandbox/
 cabal.sandbox.config
 dist-newstyle/
-stack.yaml
 .stack-work/
 *.prof
 *.aux
