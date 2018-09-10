@@ -3,7 +3,7 @@
 -- | This library emulates "Data.ByteString.Lazy.Char8" but includes a monadic element
 --   and thus at certain points uses a `Stream`/`FreeT` type in place of lists.
 --   See the documentation for @Data.ByteString.Streaming@ and the examples of
---   of use to implement simple shell operations <https://gist.github.com/michaelt/6c6843e6dd8030e95d58 here>. Examples of use 
+--   of use to implement simple shell operations <https://gist.github.com/michaelt/6c6843e6dd8030e95d58 here>. Examples of use
 --   with @http-client@, @attoparsec@, @aeson@, @zlib@ etc. can be found in the
 --   'streaming-utils' library.
 
@@ -12,21 +12,21 @@ module Data.ByteString.Streaming.Char8 (
     -- * The @ByteString@ type
     ByteString
 
-    -- * Introducing and eliminating 'ByteString's 
-    , empty            -- empty :: ByteString m () 
-    , pack             -- pack :: Monad m => String -> ByteString m () 
+    -- * Introducing and eliminating 'ByteString's
+    , empty            -- empty :: ByteString m ()
+    , pack             -- pack :: Monad m => String -> ByteString m ()
     , unpack
     , string
     , unlines
     , unwords
-    , singleton        -- singleton :: Monad m => Char -> ByteString m () 
-    , fromChunks       -- fromChunks :: Monad m => Stream (Of ByteString) m r -> ByteString m r 
-    , fromLazy         -- fromLazy :: Monad m => ByteString -> ByteString m () 
-    , fromStrict       -- fromStrict :: ByteString -> ByteString m () 
-    , toChunks         -- toChunks :: Monad m => ByteString m r -> Stream (Of ByteString) m r 
-    , toLazy           -- toLazy :: Monad m => ByteString m () -> m ByteString 
+    , singleton        -- singleton :: Monad m => Char -> ByteString m ()
+    , fromChunks       -- fromChunks :: Monad m => Stream (Of ByteString) m r -> ByteString m r
+    , fromLazy         -- fromLazy :: Monad m => ByteString -> ByteString m ()
+    , fromStrict       -- fromStrict :: ByteString -> ByteString m ()
+    , toChunks         -- toChunks :: Monad m => ByteString m r -> Stream (Of ByteString) m r
+    , toLazy           -- toLazy :: Monad m => ByteString m () -> m ByteString
     , toLazy_
-    , toStrict         -- toStrict :: Monad m => ByteString m () -> m ByteString 
+    , toStrict         -- toStrict :: Monad m => ByteString m () -> m ByteString
     , toStrict_
     , effects
     , copy
@@ -35,74 +35,74 @@ module Data.ByteString.Streaming.Char8 (
 
 
     -- * Transforming ByteStrings
-    , map              -- map :: Monad m => (Char -> Char) -> ByteString m r -> ByteString m r 
-    , intercalate      -- intercalate :: Monad m => ByteString m () -> Stream (ByteString m) m r -> ByteString m r 
-    , intersperse      -- intersperse :: Monad m => Char -> ByteString m r -> ByteString m r 
+    , map              -- map :: Monad m => (Char -> Char) -> ByteString m r -> ByteString m r
+    , intercalate      -- intercalate :: Monad m => ByteString m () -> Stream (ByteString m) m r -> ByteString m r
+    , intersperse      -- intersperse :: Monad m => Char -> ByteString m r -> ByteString m r
 
     -- * Basic interface
-    , cons             -- cons :: Monad m => Char -> ByteString m r -> ByteString m r 
-    , cons'            -- cons' :: Char -> ByteString m r -> ByteString m r 
+    , cons             -- cons :: Monad m => Char -> ByteString m r -> ByteString m r
+    , cons'            -- cons' :: Char -> ByteString m r -> ByteString m r
     , snoc
-    , append           -- append :: Monad m => ByteString m r -> ByteString m s -> ByteString m s   
-    , filter           -- filter :: (Char -> Bool) -> ByteString m r -> ByteString m r 
+    , append           -- append :: Monad m => ByteString m r -> ByteString m s -> ByteString m s
+    , filter           -- filter :: (Char -> Bool) -> ByteString m r -> ByteString m r
     , head             -- head :: Monad m => ByteString m r -> m Char
     , head_            -- head' :: Monad m => ByteString m r -> m (Of Char r)
     , last             -- last :: Monad m => ByteString m r -> m Char
     , last_            -- last' :: Monad m => ByteString m r -> m (Of Char r)
-    , null             -- null :: Monad m => ByteString m r -> m Bool 
+    , null             -- null :: Monad m => ByteString m r -> m Bool
     , null_
     , testNull
     , nulls            -- null' :: Monad m => ByteString m r -> m (Of Bool r)
-    , uncons           -- uncons :: Monad m => ByteString m r -> m (Either r (Char, ByteString m r)) 
-    , nextChar 
-    
+    , uncons           -- uncons :: Monad m => ByteString m r -> m (Either r (Char, ByteString m r))
+    , nextChar
+
     -- * Substrings
 
     -- ** Breaking strings
-    , break            -- break :: Monad m => (Char -> Bool) -> ByteString m r -> ByteString m (ByteString m r) 
-    , drop             -- drop :: Monad m => GHC.Int.Int64 -> ByteString m r -> ByteString m r 
+    , break            -- break :: Monad m => (Char -> Bool) -> ByteString m r -> ByteString m (ByteString m r)
+    , drop             -- drop :: Monad m => GHC.Int.Int64 -> ByteString m r -> ByteString m r
     , dropWhile
-    , group            -- group :: Monad m => ByteString m r -> Stream (ByteString m) m r 
+    , group            -- group :: Monad m => ByteString m r -> Stream (ByteString m) m r
     , groupBy
-    , span             -- span :: Monad m => (Char -> Bool) -> ByteString m r -> ByteString m (ByteString m r) 
-    , splitAt          -- splitAt :: Monad m => GHC.Int.Int64 -> ByteString m r -> ByteString m (ByteString m r) 
-    , splitWith        -- splitWith :: Monad m => (Char -> Bool) -> ByteString m r -> Stream (ByteString m) m r 
-    , take             -- take :: Monad m => GHC.Int.Int64 -> ByteString m r -> ByteString m () 
-    , takeWhile        -- takeWhile :: (Char -> Bool) -> ByteString m r -> ByteString m () 
+    , span             -- span :: Monad m => (Char -> Bool) -> ByteString m r -> ByteString m (ByteString m r)
+    , splitAt          -- splitAt :: Monad m => GHC.Int.Int64 -> ByteString m r -> ByteString m (ByteString m r)
+    , splitWith        -- splitWith :: Monad m => (Char -> Bool) -> ByteString m r -> Stream (ByteString m) m r
+    , take             -- take :: Monad m => GHC.Int.Int64 -> ByteString m r -> ByteString m ()
+    , takeWhile        -- takeWhile :: (Char -> Bool) -> ByteString m r -> ByteString m ()
 
     -- ** Breaking into many substrings
-    , split            -- split :: Monad m => Char -> ByteString m r -> Stream (ByteString m) m r 
+    , split            -- split :: Monad m => Char -> ByteString m r -> Stream (ByteString m) m r
     , lines
     , words
     , lineSplit
     , denull
-    
+
     -- ** Special folds
-    , concat          -- concat :: Monad m => Stream (ByteString m) m r -> ByteString m r 
+    , concat          -- concat :: Monad m => Stream (ByteString m) m r -> ByteString m r
 
     -- * Builders
-    
+
     , toStreamingByteString
     , toStreamingByteStringWith
     , toBuilder
     , concatBuilders
-    
+
     -- * Building ByteStrings
 
     -- ** Infinite ByteStrings
-    , repeat           -- repeat :: Char -> ByteString m () 
-    , iterate          -- iterate :: (Char -> Char) -> Char -> ByteString m () 
-    , cycle            -- cycle :: Monad m => ByteString m r -> ByteString m s 
+    , repeat           -- repeat :: Char -> ByteString m ()
+    , iterate          -- iterate :: (Char -> Char) -> Char -> ByteString m ()
+    , cycle            -- cycle :: Monad m => ByteString m r -> ByteString m s
 
     -- ** Unfolding ByteStrings
-    , unfoldr          -- unfoldr :: (a -> Maybe (Char, a)) -> a -> ByteString m () 
+    , unfoldr          -- unfoldr :: (a -> Maybe (Char, a)) -> a -> ByteString m ()
     , unfoldM          -- unfold  :: (a -> Either r (Char, a)) -> a -> ByteString m r
     , reread
-    
+
     -- *  Folds, including support for `Control.Foldl`
---    , foldr            -- foldr :: Monad m => (Char -> a -> a) -> a -> ByteString m () -> m a 
-    , fold             -- fold :: Monad m => (x -> Char -> x) -> x -> (x -> b) -> ByteString m () -> m b 
-    , fold_            -- fold' :: Monad m => (x -> Char -> x) -> x -> (x -> b) -> ByteString m r -> m (b, r) 
+--    , foldr            -- foldr :: Monad m => (Char -> a -> a) -> a -> ByteString m () -> m a
+    , fold             -- fold :: Monad m => (x -> Char -> x) -> x -> (x -> b) -> ByteString m () -> m b
+    , fold_            -- fold' :: Monad m => (x -> Char -> x) -> x -> (x -> b) -> ByteString m r -> m (b, r)
     , length
     , length_
     , count
@@ -111,33 +111,33 @@ module Data.ByteString.Streaming.Char8 (
     -- * I\/O with 'ByteString's
 
     -- ** Standard input and output
-    , getContents      -- getContents :: ByteString IO () 
-    , stdin            -- stdin :: ByteString IO () 
-    , stdout           -- stdout :: ByteString IO r -> IO r 
-    , interact         -- interact :: (ByteString IO () -> ByteString IO r) -> IO r 
+    , getContents      -- getContents :: ByteString IO ()
+    , stdin            -- stdin :: ByteString IO ()
+    , stdout           -- stdout :: ByteString IO r -> IO r
+    , interact         -- interact :: (ByteString IO () -> ByteString IO r) -> IO r
     , putStr
     , putStrLn
-    
+
     -- ** Files
-    , readFile         -- readFile :: FilePath -> ByteString IO () 
-    , writeFile        -- writeFile :: FilePath -> ByteString IO r -> IO r 
-    , appendFile       -- appendFile :: FilePath -> ByteString IO r -> IO r 
+    , readFile         -- readFile :: FilePath -> ByteString IO ()
+    , writeFile        -- writeFile :: FilePath -> ByteString IO r -> IO r
+    , appendFile       -- appendFile :: FilePath -> ByteString IO r -> IO r
 
     -- ** I\/O with Handles
-    , fromHandle       -- fromHandle :: Handle -> ByteString IO () 
-    , toHandle         -- toHandle :: Handle -> ByteString IO r -> IO r 
-    , hGet             -- hGet :: Handle -> Int -> ByteString IO () 
-    , hGetContents     -- hGetContents :: Handle -> ByteString IO () 
-    , hGetContentsN    -- hGetContentsN :: Int -> Handle -> ByteString IO () 
-    , hGetN            -- hGetN :: Int -> Handle -> Int -> ByteString IO () 
-    , hGetNonBlocking  -- hGetNonBlocking :: Handle -> Int -> ByteString IO () 
-    , hGetNonBlockingN -- hGetNonBlockingN :: Int -> Handle -> Int -> ByteString IO () 
-    , hPut             -- hPut :: Handle -> ByteString IO r -> IO r 
---    , hPutNonBlocking  -- hPutNonBlocking :: Handle -> ByteString IO r -> ByteString IO r 
+    , fromHandle       -- fromHandle :: Handle -> ByteString IO ()
+    , toHandle         -- toHandle :: Handle -> ByteString IO r -> IO r
+    , hGet             -- hGet :: Handle -> Int -> ByteString IO ()
+    , hGetContents     -- hGetContents :: Handle -> ByteString IO ()
+    , hGetContentsN    -- hGetContentsN :: Int -> Handle -> ByteString IO ()
+    , hGetN            -- hGetN :: Int -> Handle -> Int -> ByteString IO ()
+    , hGetNonBlocking  -- hGetNonBlocking :: Handle -> Int -> ByteString IO ()
+    , hGetNonBlockingN -- hGetNonBlockingN :: Int -> Handle -> Int -> ByteString IO ()
+    , hPut             -- hPut :: Handle -> ByteString IO r -> IO r
+--    , hPutNonBlocking  -- hPutNonBlocking :: Handle -> ByteString IO r -> ByteString IO r
 
-    -- * Simple chunkwise operations 
+    -- * Simple chunkwise operations
     , unconsChunk
-    , nextChunk    
+    , nextChunk
     , chunk
     , foldrChunks
     , foldlChunks
@@ -146,10 +146,10 @@ module Data.ByteString.Streaming.Char8 (
     , chunkMap
     , chunkMapM
     , chunkMapM_
-    
+
     -- * Etc.
---    , zipWithStream    -- zipWithStream :: Monad m => (forall x. a -> ByteString m x -> ByteString m x) -> [a] -> Stream (ByteString m) m r -> Stream (ByteString m) m r 
-    , distribute      -- distribute :: ByteString (t m) a -> t (ByteString m) a 
+--    , zipWithStream    -- zipWithStream :: Monad m => (forall x. a -> ByteString m x -> ByteString m x) -> [a] -> Stream (ByteString m) m r -> Stream (ByteString m) m r
+    , distribute      -- distribute :: ByteString (t m) a -> t (ByteString m) a
     , materialize
     , dematerialize
   ) where
@@ -162,7 +162,7 @@ import Prelude hiding
     ,getContents,getLine,putStr,putStrLn ,zip,zipWith,unzip,notElem)
 import qualified Prelude
 
-import qualified Data.ByteString        as B 
+import qualified Data.ByteString        as B
 import qualified Data.ByteString.Internal as B
 import Data.ByteString.Internal (c2w,w2c)
 import qualified Data.ByteString.Unsafe as B
@@ -177,18 +177,18 @@ import qualified Data.ByteString.Streaming as R
 import Data.ByteString.Streaming.Internal
 
 import Data.ByteString.Streaming
-    (fromLazy, toLazy, toLazy_, nextChunk, unconsChunk, 
-    fromChunks, toChunks, fromStrict, toStrict, toStrict_, 
+    (fromLazy, toLazy, toLazy_, nextChunk, unconsChunk,
+    fromChunks, toChunks, fromStrict, toStrict, toStrict_,
     concat, distribute, effects, drained, mwrap, toStreamingByteStringWith,
     toStreamingByteString, toBuilder, concatBuilders,
-    empty, null, nulls, null_, testNull, length, length_, append, cycle, 
+    empty, null, nulls, null_, testNull, length, length_, append, cycle,
     take, drop, splitAt, intercalate, group, denull,
     appendFile, stdout, stdin, fromHandle, toHandle,
-    hGetContents, hGetContentsN, hGet, hGetN, hPut, 
+    hGetContents, hGetContentsN, hGet, hGetN, hPut,
     getContents, hGetNonBlocking,
     hGetNonBlockingN, readFile, writeFile, interact,
     chunkFold, chunkFoldM, chunkMap, chunkMapM)
- --   hPutNonBlocking, 
+ --   hPutNonBlocking,
 
 import Control.Monad            (liftM)
 import System.IO                (Handle,openBinaryFile,IOMode(..)
@@ -206,11 +206,11 @@ import Data.Functor.Sum
 import qualified Data.List as L
 
 unpack ::  Monad m => ByteString m r ->  Stream (Of Char) m r
-unpack bs = case bs of 
+unpack bs = case bs of
     Empty r -> Return r
     Go m    -> Effect (liftM unpack m)
     Chunk c cs -> unpackAppendCharsLazy c (unpack cs)
-  where 
+  where
   unpackAppendCharsLazy :: B.ByteString -> Stream (Of Char) m r -> Stream (Of Char) m r
   unpackAppendCharsLazy (B.PS fp off len) xs
    | len <= 100 = unpackAppendCharsStrict (B.PS fp off len) xs
@@ -228,13 +228,13 @@ unpack bs = case bs of
          | otherwise     = do x <- peek p
                               loop sentinal (p `plusPtr` (-1)) (Step (B.w2c x :> acc))
 {-# INLINABLE unpack#-}
-  
+
 
 -- | /O(n)/ Convert a stream of separate characters into a packed byte stream.
 pack :: Monad m => Stream (Of Char) m r -> ByteString m r
-pack  = fromChunks 
-        . mapped (liftM (\(str :> r) -> Char8.pack str :> r) . S.toList) 
-        . chunksOf 32 
+pack  = fromChunks
+        . mapped (liftM (\(str :> r) -> Char8.pack str :> r) . S.toList)
+        . chunksOf 32
 {-# INLINABLE pack #-}
 
 -- | /O(1)/ Cons a 'Char' onto a byte stream.
@@ -267,7 +267,7 @@ cons' c cs                                = Chunk (B.singleton (c2w c)) cs
 --
 -- | /O(n\/c)/ Append a byte to the end of a 'ByteString'
 snoc :: Monad m => ByteString m r -> Char -> ByteString m r
-snoc cs = R.snoc cs . c2w 
+snoc cs = R.snoc cs . c2w
 {-# INLINE snoc #-}
 
 -- | /O(1)/ Extract the first element of a ByteString, which must be non-empty.
@@ -405,10 +405,10 @@ unfoldM f = R.unfoldM go where
     Nothing    -> Nothing
     Just (c,a) -> Just (c2w c, a)
 {-#INLINE unfoldM #-}
-    
+
 
 unfoldr :: (a -> Either r (Char, a)) -> a -> ByteString m r
-unfoldr step = R.unfoldr (either Left (\(c,a) -> Right (c2w c,a)) . step) 
+unfoldr step = R.unfoldr (either Left (\(c,a) -> Right (c2w c,a)) . step)
 {-#INLINE unfoldr #-}
 
 
@@ -501,7 +501,7 @@ filter p = R.filter (p . w2c)
 {- | 'lines' turns a ByteString into a connected stream of ByteStrings at
      divide at newline characters. The resulting strings do not contain newlines.
      This is the genuinely streaming 'lines' which only breaks chunks, and
-     thus never increases the use of memory. 
+     thus never increases the use of memory.
 
      Because 'ByteString's are usually read in binary mode, with no line
      ending conversion, this function recognizes both @\\n@ and @\\r\\n@
@@ -522,13 +522,13 @@ lines text0 = loop1 text0
     loop2 :: Bool -> ByteString m r -> ByteString m (Stream (ByteString m) m r)
     loop2 prevCr text =
       case text of
-        Empty r -> if prevCr 
-          then Chunk (B.singleton 13) (Empty (Return r)) 
+        Empty r -> if prevCr
+          then Chunk (B.singleton 13) (Empty (Return r))
           else Empty (Return r)
         Go m -> Go $ liftM (loop2 prevCr) m
         Chunk c cs ->
           case B.elemIndex 10 c of
-            Nothing -> if B.null c 
+            Nothing -> if B.null c
               then loop2 prevCr cs
               else if unsafeLast c == 13
                 then Chunk (unsafeInit c) (loop2 True cs)
@@ -560,34 +560,34 @@ unlines :: Monad m => Stream (ByteString m) m r ->  ByteString m r
 unlines = loop where
   loop str =  case str of
     Return r -> Empty r
-    Step bstr   -> do 
-      st <- bstr 
+    Step bstr   -> do
+      st <- bstr
       let bs = unlines st
-      case bs of 
+      case bs of
         Chunk "" (Empty r)   -> Empty r
-        Chunk "\n" (Empty r) -> bs 
+        Chunk "\n" (Empty r) -> bs
         _                    -> cons' '\n' bs
     Effect m  -> Go (liftM unlines m)
 {-#INLINABLE unlines #-}
 
--- | 'words' breaks a byte stream up into a succession of byte streams 
---   corresponding to words, breaking Chars representing white space. This is 
+-- | 'words' breaks a byte stream up into a succession of byte streams
+--   corresponding to words, breaking Chars representing white space. This is
 --   the genuinely streaming 'words'. A function that returns individual
 --   strict bytestrings would concatenate even infinitely
 --   long words like @cycle "y"@ in memory. It is best for the user who
 --   has reflected on her materials to write `mapped toStrict . words` or the like,
 --   if strict bytestrings are needed.
 words :: Monad m => ByteString m r -> Stream (ByteString m) m r
-words =  filtered . R.splitWith B.isSpaceWord8 
- where 
-  filtered stream = case stream of 
+words =  filtered . R.splitWith B.isSpaceWord8
+ where
+  filtered stream = case stream of
     Return r -> Return r
     Effect m -> Effect (liftM filtered m)
-    Step bs -> Effect $ bs_loop bs 
+    Step bs -> Effect $ bs_loop bs
   bs_loop bs = case bs of
       Empty r -> return $ filtered r
       Go m ->  m >>= bs_loop
-      Chunk b bs' -> if B.null b 
+      Chunk b bs' -> if B.null b
         then bs_loop bs'
         else return $ Step $ Chunk b (fmap filtered bs')
 {-# INLINABLE words #-}
@@ -599,14 +599,14 @@ unwords = intercalate (singleton ' ')
 
 
 {- | 'lineSplit' turns a ByteString into a connected stream of ByteStrings at
-     divide after a fixed number of newline characters. 
-     Unlike most of the string splitting functions in this library, 
-     this function preserves newlines characters. 
+     divide after a fixed number of newline characters.
+     Unlike most of the string splitting functions in this library,
+     this function preserves newlines characters.
 
      Like 'lines', this function properly handles both @\\n@ and @\\r\\n@
      endings regardless of the current platform. It does not support @\\r@ or
      @\\n\\r@ line endings.
-     
+
      >>> let planets = ["Mercury","Venus","Earth","Mars","Saturn","Jupiter","Neptune","Uranus"]
      >>> S.mapsM_ (\x -> putStrLn "Chunk" >> Q.putStrLn x) $ Q.lineSplit 3 $ Q.string $ L.unlines planets
      Chunk
@@ -628,7 +628,7 @@ unwords = intercalate (singleton ' ')
 
      > Ɐ n bs. concat (lineSplit n bs) ≅ bs
 -}
-lineSplit :: forall m r. Monad m 
+lineSplit :: forall m r. Monad m
   => Int -- ^ number of lines per group
   -> ByteString m r -- ^ stream of bytes
   -> Stream (ByteString m) m r
@@ -654,14 +654,14 @@ lineSplit !n0 text0 = loop1 0 text0
               !newCounter = counter + numNewlines
            in if newCounter >= n
                 then case Prelude.drop (n - counter - 1) (B.findIndices (== newline) c) of
-                  i : _ -> 
+                  i : _ ->
                     let !j = i + 1
                      in Chunk (B.unsafeTake j c) (Empty (loop1 0 (Chunk (B.unsafeDrop j c) cs)))
                   -- the empty list cannot happen unless Data.ByteString.count or
                   -- Data.ByteString.findIndices is misimplemented. The expression
                   -- that handles this case is only here to satisfy the type
                   -- checker.
-                  [] -> loop2 0 cs 
+                  [] -> loop2 0 cs
                 else Chunk c (loop2 newCounter cs)
 {-#INLINABLE lineSplit #-}
 
@@ -683,9 +683,9 @@ count c = R.count (c2w c)
 {-# INLINE count #-}
 
 nextChar :: Monad m => ByteString m r -> m (Either r (Char, ByteString m r))
-nextChar b = do 
+nextChar b = do
   e <- R.nextByte b
-  case e of 
+  case e of
     Left r -> return $! Left r
     Right (w,bs) -> return $! Right (w2c w, bs)
 
@@ -710,16 +710,16 @@ putStrLn bs = hPut IO.stdout (snoc bs '\n')
 -}
 readInt :: Monad m => ByteString m r -> m (Compose (Of (Maybe Int)) (ByteString m) r)
 readInt = go . toStrict . splitAt 18 where
-  go m = do 
+  go m = do
     (bs :> rest) <- m
     case Char8.readInt bs of
       Nothing -> return (Compose (Nothing :> (chunk bs >> rest)))
-      Just (n,more) -> if B.null more 
-        then do 
+      Just (n,more) -> if B.null more
+        then do
           e <- uncons rest
           return $ case e of
             Left r -> Compose (Just n :> return r)
-            Right (c,rest') -> if isDigit c 
+            Right (c,rest') -> if isDigit c
                then Compose (Nothing :> (chunk bs >> cons' c rest'))
                else Compose (Just n :> (chunk more >> cons' c rest'))
         else return (Compose (Just n :> (chunk more >> rest)))
