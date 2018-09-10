@@ -321,13 +321,14 @@ map f = R.map (c2w . f . w2c)
 --   where rev a Empty        = a
 --         rev a (Chunk c cs) = rev (Chunk (B.reverse c) a) cs
 -- {-# INLINE reverse #-}
---
--- -- | The 'intersperse' function takes a 'Word8' and a 'ByteString' and
--- -- \`intersperses\' that byte between the elements of the 'ByteString'.
--- -- It is analogous to the intersperse function on Streams.
+
+-- | The 'intersperse' function takes a 'Char' and a 'ByteString' and
+-- \`intersperses\' that byte between the elements of the 'ByteString'.
+-- It is analogous to the intersperse function on Streams.
 intersperse :: Monad m => Char -> ByteString m r -> ByteString m r
 intersperse c = R.intersperse (c2w c)
 {-#INLINE intersperse #-}
+
 -- -- | The 'transpose' function transposes the rows and columns of its
 -- -- 'ByteString' argument.
 -- transpose :: [ByteString] -> [ByteString]

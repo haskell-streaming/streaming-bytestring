@@ -697,10 +697,10 @@ map f z = dematerialize z
 --   where rev a Empty        = a
 --         rev a (Chunk c cs) = rev (Chunk (S.reverse c) a) cs
 -- {-# INLINE reverse #-}
---
--- -- | The 'intersperse' function takes a 'Word8' and a 'ByteString' and
--- -- \`intersperses\' that byte between the elements of the 'ByteString'.
--- -- It is analogous to the intersperse function on Streams.
+
+-- | The 'intersperse' function takes a 'Word8' and a 'ByteString' and
+-- \`intersperses\' that byte between the elements of the 'ByteString'.
+-- It is analogous to the intersperse function on Streams.
 intersperse :: Monad m => Word8 -> ByteString m r -> ByteString m r
 intersperse _ (Empty r)    = Empty r
 intersperse w (Go m)       = Go (liftM (intersperse w) m)
