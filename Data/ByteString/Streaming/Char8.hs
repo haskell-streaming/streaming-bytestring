@@ -654,7 +654,7 @@ lineSplit !n0 text0 = loop1 0 text0
           let !numNewlines = B.count newline c
               !newCounter = counter + numNewlines
            in if newCounter >= n
-                then case Prelude.drop (n - counter - 1) (B.findIndices (== newline) c) of
+                then case Prelude.drop (n - counter - 1) (B.elemIndices newline c) of
                   i : _ ->
                     let !j = i + 1
                      in Chunk (B.unsafeTake j c) (Empty (loop1 0 (Chunk (B.unsafeDrop j c) cs)))
