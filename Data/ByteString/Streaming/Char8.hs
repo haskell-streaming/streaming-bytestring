@@ -651,20 +651,26 @@ lineSplit !n0 text0 = loop1 0 text0
         Empty r -> Empty (Return r)
         Go m -> Go $ liftM (loop2 counter) m
         Chunk c cs ->
-          let !numNewlines = B.count newline c
-              !newCounter = counter + numNewlines
-           in if newCounter >= n
-                then case Prelude.drop (n - counter - 1) (B.elemIndices newline c) of
+            let !total = B.count newline c
+             in loop3 counter total c cs
+    loop3 :: Int -> Int -> B.ByteString -> ByteString m r -> ByteString m (Stream (ByteString m) m r)
+    loop3 !counter !total !c ~cs
+      | B.null c = loop2 counter cs
+      | otherwise = 
+        let !m = n - counter
+         in if m <= total 
+            then case Prelude.drop (m - 1) (B.elemIndices newline c) of
                   i : _ ->
                     let !j = i + 1
-                     in Chunk (B.unsafeTake j c) (Empty (loop1 0 (Chunk (B.unsafeDrop j c) cs)))
+                     in Chunk (B.unsafeTake j c) $
+                            Empty $ Step $ loop3 0 (total - m) (B.unsafeDrop j c) cs
                   -- the empty list cannot happen unless Data.ByteString.count or
-                  -- Data.ByteString.findIndices is misimplemented. The expression
+                  -- Data.ByteString.elemIndices is misimplemented. The expression
                   -- that handles this case is only here to satisfy the type
                   -- checker.
                   [] -> loop2 0 cs
-                else Chunk c (loop2 newCounter cs)
-{-#INLINABLE lineSplit #-}
+            else Chunk c (loop2 (counter+total) cs)
+{-# INLINABLE lineSplit #-}
 
 newline :: Word8
 newline = 10
