@@ -88,7 +88,7 @@ import Control.Monad.Catch (MonadCatch (..))
 
 data ByteString m r =
   Empty r
-  | Chunk {-#UNPACK #-} !S.ByteString (ByteString m r )
+  | Chunk {-# UNPACK #-} !S.ByteString (ByteString m r )
   | Go (m (ByteString m r ))
 
 instance Monad m => Functor (ByteString m) where
@@ -99,21 +99,21 @@ instance Monad m => Functor (ByteString m) where
 
 instance Monad m => Applicative (ByteString m) where
   pure = Empty
-  {-#INLINE pure #-}
+  {-# INLINE pure #-}
   bf <*> bx = do {f <- bf; x <- bx; Empty (f x)}
-  {-#INLINE (<*>) #-}
+  {-# INLINE (<*>) #-}
   (*>) = (>>)
-  {-#INLINE (*>) #-}
+  {-# INLINE (*>) #-}
 
 instance Monad m => Monad (ByteString m) where
   return = Empty
-  {-#INLINE return #-}
+  {-# INLINE return #-}
   x0 >> y = loop SPEC x0 where
     loop !_ x = case x of   -- this seems to be insanely effective
       Empty _ -> y
       Chunk a b -> Chunk a (loop SPEC b)
       Go m -> Go (liftM (loop SPEC) m)
-  {-#INLINEABLE (>>)#-}
+  {-# INLINEABLE (>>) #-}
   x >>= f =
     -- case x of
     --   Empty a -> f a
@@ -124,26 +124,26 @@ instance Monad m => Monad (ByteString m) where
         Empty a -> f a
         Chunk bs bss -> Chunk bs (loop SPEC bss)
         Go mbss      -> Go (liftM (loop SPEC) mbss)
-  {-#INLINEABLE (>>=) #-}
+  {-# INLINEABLE (>>=) #-}
 
 instance MonadIO m => MonadIO (ByteString m) where
   liftIO io = Go (liftM Empty (liftIO io))
-  {-#INLINE liftIO #-}
+  {-# INLINE liftIO #-}
 
 instance MonadTrans ByteString where
   lift ma = Go $ liftM Empty ma
-  {-#INLINE lift #-}
+  {-# INLINE lift #-}
 
 instance MFunctor ByteString where
   hoist phi bs = case bs of
     Empty r        -> Empty r
     Chunk bs' rest -> Chunk bs' (hoist phi rest)
     Go m           -> Go (phi (liftM (hoist phi) m))
-  {-#INLINABLE hoist #-}
+  {-# INLINABLE hoist #-}
 
 instance (r ~ ()) => IsString (ByteString m r) where
   fromString = chunk . S.pack . Prelude.map S.c2w
-  {-#INLINE fromString #-}
+  {-# INLINE fromString #-}
 
 instance (m ~ Identity, Show r) => Show (ByteString m r) where
   show bs0 = case bs0 of  -- the implementation this instance deserves ...
@@ -163,11 +163,11 @@ instance (Monoid r, Monad m) => Monoid (ByteString m r) where
 
 instance (MonadBase b m) => MonadBase b (ByteString m) where
   liftBase  = mwrap . fmap return . liftBase
-  {-#INLINE liftBase #-}
+  {-# INLINE liftBase #-}
 
 instance (MonadThrow m) => MonadThrow (ByteString m) where
   throwM = lift . throwM
-  {-#INLINE throwM #-}
+  {-# INLINE throwM #-}
 
 instance (MonadCatch m) => MonadCatch (ByteString m) where
   catch str f = go str
@@ -179,11 +179,11 @@ instance (MonadCatch m) => MonadCatch (ByteString m) where
           p' <- m
           return (go p'))
        (\e -> return (f e)) )
-  {-#INLINABLE catch #-}
+  {-# INLINABLE catch #-}
 
 instance (MonadResource m) => MonadResource (ByteString m) where
   liftResourceT = lift . liftResourceT
-  {-#INLINE liftResourceT #-}
+  {-# INLINE liftResourceT #-}
 
 bracketByteString :: (MonadResource m) =>
        IO a -> (a -> IO ()) -> (a -> ByteString m b) -> ByteString m b
@@ -196,7 +196,7 @@ bracketByteString alloc free inside = do
         Empty r        -> Go (release key >> return (Empty r))
         Go m           -> Go (liftM loop m)
         Chunk bs rest  -> Chunk bs (loop rest)
-{-#INLINABLE bracketByteString #-}
+{-# INLINABLE bracketByteString #-}
 
 
 data SPEC = SPEC | SPEC2
@@ -232,7 +232,7 @@ mwrap = Go
 materialize :: (forall x . (r -> x) -> (S.ByteString -> x -> x) -> (m x -> x) -> x)
             -> ByteString m r
 materialize phi = phi Empty Chunk Go
-{-#INLINE[0] materialize #-}
+{-# INLINE[0] materialize #-}
 
 -- | Resolve a succession of chunks into its Church encoding; this is
 -- not a safe operation; it is equivalent to exposing the constructors
@@ -267,17 +267,17 @@ dematerialize x0 nil cons mwrap = loop SPEC x0
 defaultChunkSize :: Int
 defaultChunkSize = 32 * k - chunkOverhead
    where k = 1024
-{-#INLINE defaultChunkSize #-}
+{-# INLINE defaultChunkSize #-}
 -- | The recommended chunk size. Currently set to 4k, less the memory management overhead
 smallChunkSize :: Int
 smallChunkSize = 4 * k - chunkOverhead
    where k = 1024
-{-#INLINE smallChunkSize #-}
+{-# INLINE smallChunkSize #-}
 
 -- | The memory management overhead. Currently this is tuned for GHC only.
 chunkOverhead :: Int
 chunkOverhead = 2 * sizeOf (undefined :: Int)
-{-#INLINE chunkOverhead #-}
+{-# INLINE chunkOverhead #-}
 -- ------------------------------------------------------------------------
 -- | Packing and unpacking from lists
 -- packBytes' :: Monad m => [Word8] -> ByteString m ()
@@ -299,7 +299,7 @@ chunkOverhead = 2 * sizeOf (undefined :: Int)
 --             fp <- S.mallocByteString l
 --             (l', res) <- withForeignPtr fp $ \p -> f p
 --             assert (l' <= l) $ return (S.PS fp 0 l', res)
--- {-#INLINABLE packBytes' #-}
+-- {-# INLINABLE packBytes' #-}
 
 packBytes :: Monad m => Stream (Of Word8) m r -> ByteString m r
 packBytes cs0 = do
@@ -310,11 +310,11 @@ packBytes cs0 = do
       Step as  -> packBytes (Step as)  -- these two pattern matches
       Effect m -> Go $ liftM packBytes m -- should be evaded.
     _  -> Chunk (S.packBytes bytes) (packBytes rest)
-{-#INLINABLE packBytes #-}
+{-# INLINABLE packBytes #-}
 
 packChars :: Monad m => Stream (Of Char) m r -> ByteString m r
 packChars = packBytes . SP.map S.c2w
-{-#INLINABLE packChars #-}
+{-# INLINABLE packChars #-}
 
 
 
@@ -377,15 +377,15 @@ foldlChunks f z = go z
 
 chunkMap :: Monad m => (S.ByteString -> S.ByteString) -> ByteString m r -> ByteString m r
 chunkMap f bs = dematerialize bs return (\bs bss -> Chunk (f bs) bss) Go
-{-#INLINE chunkMap #-}
+{-# INLINE chunkMap #-}
 
 chunkMapM :: Monad m => (S.ByteString -> m S.ByteString) -> ByteString m r -> ByteString m r
 chunkMapM f bs = dematerialize bs return (\bs bss -> Go (liftM (flip Chunk bss) (f bs))) Go
-{-#INLINE chunkMapM #-}
+{-# INLINE chunkMapM #-}
 
 chunkMapM_ :: Monad m => (S.ByteString -> m x) -> ByteString m r -> m r
 chunkMapM_ f bs = dematerialize bs return (\bs mr -> f bs >> mr) join
-{-#INLINE chunkMapM_ #-}
+{-# INLINE chunkMapM_ #-}
 
 
 {- | @chunkFold@ is preferable to @foldlChunks@ since it is

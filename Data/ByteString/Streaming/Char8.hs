@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, BangPatterns #-}
-{-#LANGUAGE RankNTypes, OverloadedStrings, ScopedTypeVariables #-}
+{-# LANGUAGE RankNTypes, OverloadedStrings, ScopedTypeVariables #-}
 -- | This library emulates "Data.ByteString.Lazy.Char8" but includes a monadic element
 --   and thus at certain points uses a `Stream`/`FreeT` type in place of lists.
 --   See the documentation for @Data.ByteString.Streaming@ and the examples of
@@ -227,7 +227,7 @@ unpack bs = case bs of
          | p == sentinal = return acc
          | otherwise     = do x <- peek p
                               loop sentinal (p `plusPtr` (-1)) (Step (B.w2c x :> acc))
-{-# INLINABLE unpack#-}
+{-# INLINABLE unpack #-}
 
 
 -- | /O(n)/ Convert a stream of separate characters into a packed byte stream.
@@ -292,7 +292,7 @@ last = liftM (\(m:>r) -> fmap (w2c) m :> r) . R.last
 
 groupBy :: Monad m => (Char -> Char -> Bool) -> ByteString m r -> Stream (ByteString m) m r
 groupBy rel = R.groupBy (\w w' -> rel (w2c w) (w2c w'))
-{-#INLINE groupBy #-}
+{-# INLINE groupBy #-}
 
 -- | /O(1)/ Extract the head and tail of a ByteString, returning Nothing
 -- if it is empty.
@@ -327,7 +327,7 @@ map f = R.map (c2w . f . w2c)
 -- It is analogous to the intersperse function on Streams.
 intersperse :: Monad m => Char -> ByteString m r -> ByteString m r
 intersperse c = R.intersperse (c2w c)
-{-#INLINE intersperse #-}
+{-# INLINE intersperse #-}
 
 -- -- | The 'transpose' function transposes the rows and columns of its
 -- -- 'ByteString' argument.
@@ -366,14 +366,14 @@ fold step begin done p0 = loop p0 begin
 
 iterate :: (Char -> Char) -> Char -> ByteString m r
 iterate f c = R.iterate (c2w . f . w2c) (c2w c)
-{-#INLINE iterate #-}
+{-# INLINE iterate #-}
 
 -- | @'repeat' x@ is an infinite ByteString, with @x@ the value of every
 -- element.
 --
 repeat :: Char -> ByteString m r
 repeat = R.repeat . c2w
-{-#INLINE repeat #-}
+{-# INLINE repeat #-}
 
 -- -- | /O(n)/ @'replicate' n x@ is a ByteString of length @n@ with @x@
 -- -- the value of every element.
@@ -405,12 +405,12 @@ unfoldM f = R.unfoldM go where
   go a = case f a of
     Nothing    -> Nothing
     Just (c,a) -> Just (c2w c, a)
-{-#INLINE unfoldM #-}
+{-# INLINE unfoldM #-}
 
 
 unfoldr :: (a -> Either r (Char, a)) -> a -> ByteString m r
 unfoldr step = R.unfoldr (either Left (\(c,a) -> Right (c2w c,a)) . step)
-{-#INLINE unfoldr #-}
+{-# INLINE unfoldr #-}
 
 
 -- ---------------------------------------------------------------------
@@ -421,27 +421,27 @@ unfoldr step = R.unfoldr (either Left (\(c,a) -> Right (c2w c,a)) . step)
 -- satisfy @p@.
 takeWhile :: Monad m => (Char -> Bool) -> ByteString m r -> ByteString m ()
 takeWhile f  = R.takeWhile (f . w2c)
-{-#INLINE takeWhile #-}
+{-# INLINE takeWhile #-}
 
 -- | 'dropWhile' @p xs@ returns the suffix remaining after 'takeWhile' @p xs@.
 
 dropWhile :: Monad m => (Char -> Bool) -> ByteString m r -> ByteString m r
 dropWhile f = R.dropWhile (f . w2c)
-{-#INLINE dropWhile #-}
+{-# INLINE dropWhile #-}
 
 {- | 'break' @p@ is equivalent to @'span' ('not' . p)@.
 
 -}
 break :: Monad m => (Char -> Bool) -> ByteString m r -> ByteString m (ByteString m r)
 break f = R.break (f . w2c)
-{-#INLINE break #-}
+{-# INLINE break #-}
 
 --
 -- | 'span' @p xs@ breaks the ByteString into two segments. It is
 -- equivalent to @('takeWhile' p xs, 'dropWhile' p xs)@
 span :: Monad m => (Char -> Bool) -> ByteString m r -> ByteString m (ByteString m r)
 span p = break (not . p)
-{-#INLINE span #-}
+{-# INLINE span #-}
 
 -- -- | /O(n)/ Splits a 'ByteString' into components delimited by
 -- -- separators, where the predicate returns True for a separator element.
@@ -547,7 +547,7 @@ lines text0 = loop1 text0
               if i > 0 && prevCr
                 then Chunk (B.singleton 13) result
                 else result
-{-#INLINABLE lines #-}
+{-# INLINABLE lines #-}
 
 -- | The 'unlines' function restores line breaks between layers.
 --
@@ -569,7 +569,7 @@ unlines = loop where
         Chunk "\n" (Empty r) -> bs
         _                    -> cons' '\n' bs
     Effect m  -> Go (liftM unlines m)
-{-#INLINABLE unlines #-}
+{-# INLINABLE unlines #-}
 
 -- | 'words' breaks a byte stream up into a succession of byte streams
 --   corresponding to words, breaking Chars representing white space. This is
@@ -692,11 +692,11 @@ nextChar b = do
 
 putStr :: MonadIO m => ByteString m r -> m r
 putStr = hPut IO.stdout
-{-#INLINE putStr #-}
+{-# INLINE putStr #-}
 
 putStrLn :: MonadIO m => ByteString m r -> m r
 putStrLn bs = hPut IO.stdout (snoc bs '\n')
-{-#INLINE putStrLn #-}
+{-# INLINE putStrLn #-}
 -- , head'
 -- , last
 -- , last'
@@ -724,6 +724,6 @@ readInt = go . toStrict . splitAt 18 where
                then Compose (Nothing :> (chunk bs >> cons' c rest'))
                else Compose (Just n :> (chunk more >> cons' c rest'))
         else return (Compose (Just n :> (chunk more >> rest)))
-{-#INLINABLE readInt #-}
+{-# INLINABLE readInt #-}
 
          -- uncons :: Monad m => ByteString m r -> m (Either r (Char, ByteString m r))
