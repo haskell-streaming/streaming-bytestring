@@ -27,7 +27,7 @@ unlike
 ```haskell
 data ByteString
   = Empty 
-  | Chunk {-#UNPACK #-} !S.ByteString ByteString
+  | Chunk {-# UNPACK #-} !S.ByteString ByteString
 ```  
 That's it. 
 
