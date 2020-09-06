@@ -1,6 +1,8 @@
-# bytestring-streaming
+streaming-bytestring
+====================
+[![Hackage](https://img.shields.io/hackage/v/streaming-bytestring.svg)](https://hackage.haskell.org/package/streaming-bytestring) [![Build Status](https://travis-ci.org/haskell-streaming/streaming-bytestring.svg?branch=master)](https://travis-ci.org/haskell-streaming/streaming-bytestring)
 
-This package depends on the [`streaming` library](https://github.com/michaelt/streaming)
+This package depends on the [`streaming` library](https://github.com/haskell-streaming/streaming)
 
 
               copy 200M file    divide it on lines, 
