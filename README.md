@@ -17,17 +17,18 @@ This library is modeled as far as possible on the internal structure of
 `Data.ByteString.Lazy`. There are two changes: a chunk may be delayed
 by a monadic step, and the sucession of steps has a 'return' value:
 
-    data ByteString m r =
-      Empty r
-      | Chunk {-#UNPACK #-} !S.ByteString (ByteString m r)
-      | Go (m (ByteString m r ))
-
+```haskell
+data ByteString m r
+  = Empty r
+  | Chunk {-# UNPACK #-} !S.ByteString (ByteString m r)
+  | Go (m (ByteString m r ))
+```
 unlike 
-
-    data ByteString = 
-      Empty 
-      | Chunk {-#UNPACK #-} !S.ByteString ByteString
-   
+```haskell
+data ByteString
+  = Empty 
+  | Chunk {-#UNPACK #-} !S.ByteString ByteString
+```  
 That's it. 
 
 -----
