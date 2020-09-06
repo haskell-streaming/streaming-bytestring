@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, BangPatterns #-}
-{-#LANGUAGE RankNTypes, GADTs #-}
+{-# LANGUAGE RankNTypes, GADTs #-}
 -- This library emulates Data.ByteString.Lazy but includes a monadic element
 -- and thus at certain points uses a `Stream`/`FreeT` type in place of lists.
 
@@ -280,7 +280,7 @@ singleton w = Chunk (S.singleton w)  (Empty ())
 -}
 pack :: Monad m => Stream (Of Word8) m r -> ByteString m r
 pack = packBytes
-{-#INLINE pack #-}
+{-# INLINE pack #-}
 
 {-| /O(n)/ Converts a packed byte stream into a stream of individual bytes.
 -}
@@ -295,7 +295,7 @@ fromChunks cs = destroy cs
   (\(bs :> rest) -> Chunk bs rest)
   Go
   return
-{-#INLINE fromChunks#-}
+{-# INLINE fromChunks #-}
 
 {-| /O(c)/ Convert a byte stream into a stream of individual strict bytestrings.
     This of course exposes the internal chunk structure.
@@ -306,7 +306,7 @@ toChunks bs =
       return
       (\b mx -> Step (b:> mx))
       Effect
-{-#INLINE toChunks#-}
+{-# INLINE toChunks #-}
 
 {-| /O(1)/ yield a strict 'ByteString' chunk.
 -}
@@ -366,7 +366,7 @@ toLazy_ bs = dematerialize bs
                 (\_ -> return (BI.Empty))
                 (\b mx -> liftM (BI.Chunk b) mx)
                 join
-{-#INLINE toLazy_ #-}
+{-# INLINE toLazy_ #-}
 
 {-| /O(n)/ Convert an effectful byte stream into a single lazy 'ByteString'
     with the same internal chunk structure, retaining the original
@@ -396,7 +396,7 @@ toLazy bs0 = dematerialize bs0
                       return $ BI.Chunk b bs :> x
                       )
                 join
-{-#INLINE toLazy #-}
+{-# INLINE toLazy #-}
 
 
 
@@ -459,7 +459,7 @@ testNull p@(Chunk bs rest) = if S.null bs
 -}
 denull :: Monad m => Stream (ByteString m) m r -> Stream (ByteString m) m r
 denull = hoist (run . maps effects) . separate . mapped nulls
-{-#INLINE denull #-}
+{-# INLINE denull #-}
 
 
 
@@ -1061,7 +1061,7 @@ dropWhile pred = drop' where
         0                  -> Chunk c cs
         n | n < S.length c -> Chunk (S.drop n c) cs
           | otherwise      -> drop' cs
-{-#INLINABLE dropWhile #-}
+{-# INLINABLE dropWhile #-}
 
 -- | 'break' @p@ is equivalent to @'span' ('not' . p)@.
 break :: Monad m => (Word8 -> Bool) -> ByteString m r -> ByteString m (ByteString m r)
@@ -1219,7 +1219,7 @@ group = go
                                     (S.unsafeTake n c : acc)
                                     (Empty (go (Chunk (S.unsafeDrop n c) cs)))
 
-{-#INLINABLE group #-}
+{-# INLINABLE group #-}
 
 -- | The 'groupBy' function is a generalized version of 'group'.
 groupBy :: Monad m => (Word8 -> Word8 -> Bool) -> ByteString m r -> Stream (ByteString m) m r
@@ -1244,7 +1244,7 @@ groupBy rel = go
         | otherwise        -> revNonEmptyChunks
                                     (S.unsafeTake n c : acc)
                                     (Empty (go (Chunk (S.unsafeDrop n c) cs)))
-{-#INLINABLE groupBy #-}
+{-# INLINABLE groupBy #-}
 
 -- -- | The 'groupBy' function is the non-overloaded version of 'group'.
 -- --
@@ -1448,7 +1448,7 @@ hGetContentsN k h = loop -- TODO close on exceptions
         if S.null c
           then Empty ()
           else Chunk c loop
-{-#INLINABLE hGetContentsN #-} -- very effective inline pragma
+{-# INLINABLE hGetContentsN #-} -- very effective inline pragma
 
 -- | Read @n@ bytes into a 'ByteString', directly from the
 -- specified 'Handle', in chunks of size @k@.
@@ -1464,7 +1464,7 @@ hGetN k h n | n > 0 = readChunks n
 
 hGetN _ _ 0 = Empty ()
 hGetN _ h n = liftIO $ illegalBufferSize h "hGet" n  -- <--- REPAIR !!!
-{-#INLINABLE hGetN #-}
+{-# INLINABLE hGetN #-}
 
 -- | hGetNonBlockingN is similar to 'hGetContentsN', except that it will never block
 -- waiting for data to become available, instead it returns only whatever data
@@ -1502,23 +1502,23 @@ illegalBufferSize handle fn sz =
 -}
 hGetContents :: MonadIO m => Handle -> ByteString m ()
 hGetContents = hGetContentsN defaultChunkSize
-{-#INLINE hGetContents #-}
+{-# INLINE hGetContents #-}
 
 -- | Pipes-style nomenclature for 'hGetContents'
 fromHandle :: MonadIO m => Handle -> ByteString m ()
 fromHandle = hGetContents
-{-#INLINE fromHandle #-}
+{-# INLINE fromHandle #-}
 
 -- | Pipes-style nomenclature for 'getContents'
 stdin :: MonadIO m => ByteString m ()
 stdin =  hGetContents IO.stdin
-{-#INLINE stdin #-}
+{-# INLINE stdin #-}
 
 -- | Read @n@ bytes into a 'ByteString', directly from the specified 'Handle'.
 --
 hGet :: MonadIO m => Handle -> Int -> ByteString m ()
 hGet = hGetN defaultChunkSize
-{-#INLINE hGet #-}
+{-# INLINE hGet #-}
 
 -- | hGetNonBlocking is similar to 'hGet', except that it will never block
 -- waiting for data to become available, instead it returns only whatever data
@@ -1530,7 +1530,7 @@ hGet = hGetN defaultChunkSize
 --
 hGetNonBlocking :: MonadIO m => Handle -> Int -> ByteString m ()
 hGetNonBlocking = hGetNonBlockingN defaultChunkSize
-{-#INLINE hGetNonBlocking #-}
+{-# INLINE hGetNonBlocking #-}
 
 {-| Write a 'ByteString' to a file. Use 'Control.Monad.Trans.ResourceT.runResourceT'
     to ensure that the handle is closed.
@@ -1569,7 +1569,7 @@ Goodbye world.
 
 readFile :: MonadResource m => FilePath -> ByteString m ()
 readFile f = bracketByteString (openBinaryFile f ReadMode) hClose hGetContents
-{-#INLINE readFile #-}
+{-# INLINE readFile #-}
 
 
 
@@ -1605,17 +1605,17 @@ getContents = hGetContents IO.stdin
 --
 hPut ::  MonadIO m => Handle -> ByteString m r -> m r
 hPut h cs = dematerialize cs return (\x y -> liftIO (S.hPut h x) >> y) (>>= id)
-{-#INLINE hPut #-}
+{-# INLINE hPut #-}
 
 -- | Pipes nomenclature for 'hPut'
 toHandle :: MonadIO m => Handle -> ByteString m r -> m r
 toHandle = hPut
-{-#INLINE toHandle #-}
+{-# INLINE toHandle #-}
 
 -- | Pipes-style nomenclature for 'putStr'
 stdout ::  MonadIO m => ByteString m r -> m r
 stdout = hPut IO.stdout
-{-#INLINE stdout#-}
+{-# INLINE stdout #-}
 
 -- -- | Similar to 'hPut' except that it will never block. Instead it returns
 -- any tail that did not get written. This tail may be 'empty' in the case that
@@ -1678,7 +1678,7 @@ interact f = stdout (f stdin)
 
 revNonEmptyChunks :: [P.ByteString] -> ByteString m r -> ByteString m r
 revNonEmptyChunks = Prelude.foldr (\bs f -> Chunk bs . f) id
-{-#INLINE revNonEmptyChunks#-}
+{-# INLINE revNonEmptyChunks #-}
   -- loop p xs
   -- where
   --   loop !bss [] = bss
@@ -1691,7 +1691,7 @@ revNonEmptyChunks = Prelude.foldr (\bs f -> Chunk bs . f) id
 -- reverse a list of possibly-empty chunks into a lazy ByteString
 revChunks :: Monad m => [P.ByteString] -> r -> ByteString m r
 revChunks cs r = L.foldl' (flip Chunk) (Empty r) cs
-{-#INLINE revChunks #-}
+{-# INLINE revChunks #-}
 -- | 'findIndexOrEnd' is a variant of findIndex, that returns the length
 -- of the string if no element is found, rather than Nothing.
 findIndexOrEnd :: (Word8 -> Bool) -> P.ByteString -> Int
@@ -1720,7 +1720,7 @@ zipWithStream op zs = loop zs
       Step fls -> Step $ fmap (loop xs) (op x fls)
       Effect mls -> Effect $ liftM (loop a) mls
 
-{-#INLINABLE zipWithStream #-}
+{-# INLINABLE zipWithStream #-}
 
 {- Take a builder constructed otherwise and convert it to a genuine
    streaming bytestring.
@@ -1738,7 +1738,7 @@ toStreamingByteString
   :: MonadIO m => Builder -> ByteString m ()
 toStreamingByteString = toStreamingByteStringWith
  (safeStrategy BI.smallChunkSize BI.defaultChunkSize)
-{-#INLINE toStreamingByteString #-}
+{-# INLINE toStreamingByteString #-}
 
 {-| Take a builder and convert it to a genuine
    streaming bytestring, using a specific allocation strategy.
@@ -1760,8 +1760,8 @@ toStreamingByteStringWith strategy builder0 = do
               where
                 bs = byteStringFromBuffer buffer
        loop cios
-{-#INLINABLE toStreamingByteStringWith #-}
-{-#SPECIALIZE toStreamingByteStringWith ::  AllocationStrategy -> Builder -> ByteString IO () #-}
+{-# INLINABLE toStreamingByteStringWith #-}
+{-# SPECIALIZE toStreamingByteStringWith ::  AllocationStrategy -> Builder -> ByteString IO () #-}
 
 
 {- Concatenate a stream of builders (not a streaming bytestring!) into a single builder.
@@ -1777,7 +1777,7 @@ concatBuilders p = builder $ \bstep r -> do
     Return _          -> runBuilderWith mempty bstep r
     Step (b :> rest)  -> runBuilderWith (b `mappend` concatBuilders rest) bstep r
     Effect m            -> m >>= \p' -> runBuilderWith (concatBuilders p') bstep r
-{-#INLINABLE concatBuilders #-}
+{-# INLINABLE concatBuilders #-}
 
 
 {-| A simple construction of a builder from a 'ByteString'.
@@ -1790,4 +1790,4 @@ concatBuilders p = builder $ \bstep r -> do
 -}
 toBuilder :: ByteString IO () -> Builder
 toBuilder  =  concatBuilders . SP.map byteString . toChunks
-{-#INLINABLE toBuilder #-}
+{-# INLINABLE toBuilder #-}
