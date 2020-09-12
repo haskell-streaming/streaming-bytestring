@@ -58,6 +58,10 @@ import           Prelude hiding
     unlines, unzip, writeFile, zip, zipWith)
 import qualified Prelude
 
+#if !MIN_VERSION_base(4,9,0)
+import           Data.Semigroup
+#endif
+
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Internal as S
 
