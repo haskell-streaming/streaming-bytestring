@@ -173,7 +173,7 @@ maintainer:          andrew.thaddeus@gmail.com, what_is_it_to_do_anything@yahoo.
 -- copyright:
 category:            Data, Pipes, Streaming
 build-type:          Simple
-extra-source-files:  README.md, ChangeLog.md, tests/sample.txt
+extra-source-files:  README.md, CHANGELOG.md, tests/sample.txt
 cabal-version:       >=1.10
 stability:           Experimental
 homepage:            https://github.com/haskell-streaming/streaming-bytestring
