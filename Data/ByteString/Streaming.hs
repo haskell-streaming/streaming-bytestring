@@ -1432,8 +1432,6 @@ filter p s = go s
     waiting for a whole @k@-sized chunk, so if less than @k@ bytes are
     available then they will be returned immediately as a smaller chunk.
 
-    The handle is closed on EOF.
-
     Note: the 'Handle' should be placed in binary mode with
     'System.IO.hSetBinaryMode' for 'hGetContentsN' to
     work correctly.
@@ -1494,8 +1492,6 @@ illegalBufferSize handle fn sz =
 {-| Read entire handle contents /lazily/ into a 'ByteString'. Chunks
     are read on demand, using the default chunk size.
 
-    Once EOF is encountered, the Handle is closed.
-
     Note: the 'Handle' should be placed in binary mode with
     'System.IO.hSetBinaryMode' for 'hGetContents' to
     work correctly.
@@ -1511,7 +1507,7 @@ fromHandle = hGetContents
 
 -- | Pipes-style nomenclature for 'getContents'
 stdin :: MonadIO m => ByteString m ()
-stdin =  hGetContents IO.stdin
+stdin = hGetContents IO.stdin
 {-# INLINE stdin #-}
 
 -- | Read @n@ bytes into a 'ByteString', directly from the specified 'Handle'.
