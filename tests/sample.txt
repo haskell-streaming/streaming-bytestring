@@ -1,0 +1,7 @@
+This is
+a file
+with some text
+in it.
+Will everything
+stream as
+expected?
