@@ -633,38 +633,52 @@ lineSplit :: forall m r. Monad m
   => Int -- ^ number of lines per group
   -> ByteString m r -- ^ stream of bytes
   -> Stream (ByteString m) m r
-lineSplit !n0 text0 = loop1 0 text0
+lineSplit !n0 text0 = loop1 text0
   where
     n :: Int
     !n = max n0 1
-    loop1 :: Int -> ByteString m r -> Stream (ByteString m) m r
-    loop1 !counter text =
+    loop1 :: ByteString m r -> Stream (ByteString m) m r
+    loop1 text =
       case text of
         Empty r -> Return r
-        Go m -> Effect $ liftM (loop1 counter) m
+        Go m -> Effect $ liftM loop1 m
         Chunk c cs
-          | B.null c -> loop1 counter cs
-          | otherwise -> Step (loop2 counter text)
+          | B.null c -> loop1 cs
+          | otherwise -> Step (loop2 0 text)
     loop2 :: Int -> ByteString m r -> ByteString m (Stream (ByteString m) m r)
     loop2 !counter text =
       case text of
         Empty r -> Empty (Return r)
         Go m -> Go $ liftM (loop2 counter) m
         Chunk c cs ->
-          let !numNewlines = B.count newline c
-              !newCounter = counter + numNewlines
-           in if newCounter >= n
-                then case Prelude.drop (n - counter - 1) (B.findIndices (== newline) c) of
-                  i : _ ->
-                    let !j = i + 1
-                     in Chunk (B.unsafeTake j c) (Empty (loop1 0 (Chunk (B.unsafeDrop j c) cs)))
-                  -- the empty list cannot happen unless Data.ByteString.count or
-                  -- Data.ByteString.findIndices is misimplemented. The expression
-                  -- that handles this case is only here to satisfy the type
-                  -- checker.
-                  [] -> loop2 0 cs
-                else Chunk c (loop2 newCounter cs)
-{-#INLINABLE lineSplit #-}
+          case nthNewLine c (n - counter) of
+            Left  !i -> Chunk c (loop2 (counter + i) cs)
+            Right !l -> Chunk (B.unsafeTake l c)
+                        $ Empty $ loop1 $! Chunk (B.unsafeDrop l c) cs
+{-# INLINABLE lineSplit #-}
+
+-- | Return either how many newlines a strict bytestring chunk contains, if
+-- fewer than the number requested, or, else the total length of the requested
+-- number of lines within the bytestring (equivalently, i.e. the start index of
+-- the first /unwanted line/).
+nthNewLine :: B.ByteString   -- input chunk
+           -> Int            -- remaining number of newlines wanted
+           -> Either Int Int -- Left count, else Right length
+nthNewLine (B.PS fp off len) targetLines =
+    unsafeDupablePerformIO $ withForeignPtr fp $ \base ->
+    loop (base `plusPtr` off) targetLines 0 len
+  where
+    loop :: Ptr Word8 -> Int -> Int -> Int -> IO (Either Int Int)
+    loop !_ 0 !startIx !_ = return $ Right startIx
+    loop !p !linesNeeded !startIx !bytesLeft = do
+      q <- B.memchr p newline $ fromIntegral bytesLeft
+      if q == nullPtr
+      then return $ Left $! targetLines - linesNeeded
+      else let !pnext = q `plusPtr` 1
+               !skip  = pnext `minusPtr` p
+               !snext = startIx + skip
+               !bytes = bytesLeft - skip
+            in loop pnext (linesNeeded - 1) snext bytes
 
 newline :: Word8
 newline = 10
