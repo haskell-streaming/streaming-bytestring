@@ -1194,55 +1194,39 @@ split w = loop
 --
 -- It is a special case of 'groupBy', which allows the programmer to
 -- supply their own equality test.
-
 group :: Monad m => ByteString m r -> Stream (ByteString m) m r
 group = go
   where
-  go (Empty r)         = Return r
-  go (Go m)            = Effect $ liftM go m
-  go (Chunk c cs)
-    | S.length c == 1  = Step $ to [c] (S.unsafeHead c) cs
-    | otherwise        = Step $ to [S.unsafeTake 1 c] (S.unsafeHead c)
-                                     (Chunk (S.unsafeTail c) cs)
+    go (Empty r)        = Return r
+    go (Go m)           = Effect $ liftM go m
+    go (Chunk c cs)
+      | S.length c == 1 = Step $ to [c] (S.unsafeHead c) cs
+      | otherwise       = Step $ to [S.unsafeTake 1 c] (S.unsafeHead c) (Chunk (S.unsafeTail c) cs)
 
-  to acc !_ (Empty r)        = revNonEmptyChunks
-                                     acc
-                                     (Empty (Return r))
-  to acc !w (Chunk c cs) =
-    case findIndexOrEnd (/= w) c of
-      0                    -> revNonEmptyChunks
-                                    acc
-                                    (Empty (go (Chunk c cs)))
-      n | n == S.length c  -> to (S.unsafeTake n c : acc) w cs
-        | otherwise        -> revNonEmptyChunks
-                                    (S.unsafeTake n c : acc)
-                                    (Empty (go (Chunk (S.unsafeDrop n c) cs)))
-
+    to acc !_ (Empty r) = revNonEmptyChunks acc (Empty (Return r))
+    to _ _ (Go _) = error "Impossible case"
+    to acc !w (Chunk c cs) = case findIndexOrEnd (/= w) c of
+      0 -> revNonEmptyChunks acc (Empty (go (Chunk c cs)))
+      n | n == S.length c -> to (S.unsafeTake n c : acc) w cs
+        | otherwise       -> revNonEmptyChunks (S.unsafeTake n c : acc) (Empty (go (Chunk (S.unsafeDrop n c) cs)))
 {-# INLINABLE group #-}
 
 -- | The 'groupBy' function is a generalized version of 'group'.
 groupBy :: Monad m => (Word8 -> Word8 -> Bool) -> ByteString m r -> Stream (ByteString m) m r
 groupBy rel = go
   where
-  go (Empty r)         = Return r
-  go (Go m)            = Effect $ liftM go m
-  go (Chunk c cs)
-    | S.length c == 1  = Step $ to [c] (S.unsafeHead c) cs
-    | otherwise        = Step $ to [S.unsafeTake 1 c] (S.unsafeHead c)
-                                     (Chunk (S.unsafeTail c) cs)
+    go (Empty r)        = Return r
+    go (Go m)           = Effect $ liftM go m
+    go (Chunk c cs)
+      | S.length c == 1 = Step $ to [c] (S.unsafeHead c) cs
+      | otherwise       = Step $ to [S.unsafeTake 1 c] (S.unsafeHead c) (Chunk (S.unsafeTail c) cs)
 
-  to acc !_ (Empty r)        = revNonEmptyChunks
-                                     acc
-                                     (Empty (Return r))
-  to acc !w (Chunk c cs) =
-    case findIndexOrEnd (not . rel w) c of
-      0                    -> revNonEmptyChunks
-                                    acc
-                                    (Empty (go (Chunk c cs)))
+    to acc !_ (Empty r) = revNonEmptyChunks acc (Empty (Return r))
+    to _ _ (Go _) = error "Impossible case"
+    to acc !w (Chunk c cs) = case findIndexOrEnd (not . rel w) c of
+      0 -> revNonEmptyChunks acc (Empty (go (Chunk c cs)))
       n | n == S.length c  -> to (S.unsafeTake n c : acc) w cs
-        | otherwise        -> revNonEmptyChunks
-                                    (S.unsafeTake n c : acc)
-                                    (Empty (go (Chunk (S.unsafeDrop n c) cs)))
+        | otherwise        -> revNonEmptyChunks (S.unsafeTake n c : acc) (Empty (go (Chunk (S.unsafeDrop n c) cs)))
 {-# INLINABLE groupBy #-}
 
 -- -- | The 'groupBy' function is the non-overloaded version of 'group'.
