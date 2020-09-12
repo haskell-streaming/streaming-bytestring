@@ -1,6 +1,13 @@
-{-# LANGUAGE CPP, BangPatterns, RankNTypes, GADTs #-}
-{-# LANGUAGE UnliftedFFITypes, MagicHash, UnboxedTuples #-}
-{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, UndecidableInstances #-}
+{-# LANGUAGE BangPatterns          #-}
+{-# LANGUAGE CPP                   #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
+{-# LANGUAGE MagicHash             #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE UnboxedTuples         #-}
+{-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE UnliftedFFITypes      #-}
 
 module Data.ByteString.Streaming.Internal (
    ByteString (..)
@@ -39,45 +46,40 @@ module Data.ByteString.Streaming.Internal (
    , bracketByteString
   ) where
 
-import Prelude hiding
-    (reverse,head,tail,last,init,null,length,map,lines,foldl,foldr,unlines
-    ,concat,any,take,drop,splitAt,takeWhile,dropWhile,span,break,elem,filter,maximum
-    ,minimum,all,concatMap,foldl1,foldr1,scanl, scanl1, scanr, scanr1
-    ,repeat, cycle, interact, iterate,readFile,writeFile,appendFile,replicate
-    ,getContents,getLine,putStr,putStrLn ,zip,zipWith,unzip,notElem)
+import           Control.Monad
+import           Control.Monad.Morph
+import           Control.Monad.Trans
+import           Prelude hiding
+    (all, any, appendFile, break, concat, concatMap, cycle, drop, dropWhile,
+    elem, filter, foldl, foldl1, foldr, foldr1, getContents, getLine, head,
+    init, interact, iterate, last, length, lines, map, maximum, minimum,
+    notElem, null, putStr, putStrLn, readFile, repeat, replicate, reverse,
+    scanl, scanl1, scanr, scanr1, span, splitAt, tail, take, takeWhile,
+    unlines, unzip, writeFile, zip, zipWith)
 import qualified Prelude
-import Control.Monad.Trans
-import Control.Monad
-import Control.Applicative
-import Control.Monad.Morph
-import Data.Monoid (Monoid(..))
 
-#if __GLASGOW_HASKELL__ < 841
-import Data.Semigroup
-#endif
-
-import qualified Data.ByteString        as S  -- S for strict (hmm...)
+import qualified Data.ByteString as S
 import qualified Data.ByteString.Internal as S
 
-import Streaming (Of(..))
-import Streaming.Internal hiding (concats, mwrap, step)
+import           Streaming (Of(..))
+import           Streaming.Internal hiding (concats)
 import qualified Streaming.Prelude as SP
 
-import Foreign.ForeignPtr       (withForeignPtr)
-import Foreign.Ptr
-import Foreign.Storable
-import GHC.Exts ( SpecConstrAnnotation(..) )
-import Data.String
+import           Data.String
+import           Foreign.ForeignPtr (withForeignPtr)
+import           Foreign.Ptr
+import           Foreign.Storable
+import           GHC.Exts (SpecConstrAnnotation(..))
 
-import Data.Functor.Identity
-import Data.Word
-import System.IO.Unsafe
-import GHC.Base                 (realWorld#,unsafeChr)
-import GHC.IO                   (IO(IO))
+import           Data.Functor.Identity
+import           Data.Word
+import           GHC.Base (realWorld#)
+import           GHC.IO (IO(IO))
+import           System.IO.Unsafe
 
-import Control.Monad.Base
-import Control.Monad.Trans.Resource
-import Control.Monad.Catch (MonadCatch (..))
+import           Control.Monad.Base
+import           Control.Monad.Catch (MonadCatch(..))
+import           Control.Monad.Trans.Resource
 
 -- | A space-efficient representation of a succession of 'Word8' vectors, supporting many
 -- efficient operations.
@@ -110,9 +112,9 @@ instance Monad m => Monad (ByteString m) where
   {-# INLINE return #-}
   x0 >> y = loop SPEC x0 where
     loop !_ x = case x of   -- this seems to be insanely effective
-      Empty _ -> y
+      Empty _   -> y
       Chunk a b -> Chunk a (loop SPEC b)
-      Go m -> Go (liftM (loop SPEC) m)
+      Go m      -> Go (liftM (loop SPEC) m)
   {-# INLINEABLE (>>) #-}
   x >>= f =
     -- case x of
@@ -121,7 +123,7 @@ instance Monad m => Monad (ByteString m) where
     --   Go mbss      -> Go (liftM (>>= f) mbss)
     loop SPEC2 x where -- unlike >> this SPEC seems pointless
       loop !_ y = case y of
-        Empty a -> f a
+        Empty a      -> f a
         Chunk bs bss -> Chunk bs (loop SPEC bss)
         Go mbss      -> Go (liftM (loop SPEC) mbss)
   {-# INLINEABLE (>>=) #-}
@@ -193,9 +195,9 @@ bracketByteString alloc free inside = do
   where
     clean key = loop where
       loop str = case str of
-        Empty r        -> Go (release key >> return (Empty r))
-        Go m           -> Go (liftM loop m)
-        Chunk bs rest  -> Chunk bs (loop rest)
+        Empty r       -> Go (release key >> return (Empty r))
+        Go m          -> Go (liftM loop m)
+        Chunk bs rest -> Chunk bs (loop rest)
 {-# INLINABLE bracketByteString #-}
 
 
@@ -239,12 +241,12 @@ materialize phi = phi Empty Chunk Go
 dematerialize :: Monad m
               => ByteString m r
               -> (forall x . (r -> x) -> (S.ByteString -> x -> x) -> (m x -> x) -> x)
-dematerialize x0 nil cons mwrap = loop SPEC x0
+dematerialize x0 nil cons mwrap' = loop SPEC x0
   where
   loop !_ x = case x of
      Empty r    -> nil r
      Chunk b bs -> cons b (loop SPEC bs )
-     Go ms -> mwrap (liftM (loop SPEC) ms)
+     Go ms      -> mwrap' (liftM (loop SPEC) ms)
 {-# INLINE [1] dematerialize #-}
 
 {-# RULES
@@ -333,14 +335,14 @@ unpackBytes bss = dematerialize bss
 
   unpackAppendBytesStrict :: S.ByteString -> Stream (Of Word8) m r -> Stream (Of Word8) m r
   unpackAppendBytesStrict (S.PS fp off len) xs =
-   inlinePerformIO $ withForeignPtr fp $ \base -> do
-        loop (base `plusPtr` (off-1)) (base `plusPtr` (off-1+len)) xs
+    inlinePerformIO $ withForeignPtr fp $ \base ->
+      loop (base `plusPtr` (off-1)) (base `plusPtr` (off-1+len)) xs
     where
-      accursedUnutterablePerformIO (IO m) = case m realWorld# of (# _, r #) -> r
       loop !sentinal !p acc
         | p == sentinal = return acc
-          | otherwise     = do x <- peek p
-                               loop sentinal (p `plusPtr` (-1)) (Step (x :> acc))
+        | otherwise     = do
+            x <- peek p
+            loop sentinal (p `plusPtr` (-1)) (Step (x :> acc))
 {-# INLINABLE unpackBytes #-}
 
 -- copied from Data.ByteString.Unsafe for compatibility with older bytestring
@@ -369,22 +371,22 @@ foldrChunks step nil bs = dematerialize bs
 
 foldlChunks :: Monad m => (a -> S.ByteString -> a) -> a -> ByteString m r -> m (Of a r)
 foldlChunks f z = go z
-  where go a _ | a `seq` False = undefined
+  where go a _            | a `seq` False = undefined
         go a (Empty r)    = return (a :> r)
         go a (Chunk c cs) = go (f a c) cs
         go a (Go m)       = m >>= go a
 {-# INLINABLE foldlChunks #-}
 
 chunkMap :: Monad m => (S.ByteString -> S.ByteString) -> ByteString m r -> ByteString m r
-chunkMap f bs = dematerialize bs return (\bs bss -> Chunk (f bs) bss) Go
+chunkMap f bs = dematerialize bs return (\bs' bss -> Chunk (f bs') bss) Go
 {-# INLINE chunkMap #-}
 
 chunkMapM :: Monad m => (S.ByteString -> m S.ByteString) -> ByteString m r -> ByteString m r
-chunkMapM f bs = dematerialize bs return (\bs bss -> Go (liftM (flip Chunk bss) (f bs))) Go
+chunkMapM f bs = dematerialize bs return (\bs' bss -> Go (liftM (flip Chunk bss) (f bs'))) Go
 {-# INLINE chunkMapM #-}
 
 chunkMapM_ :: Monad m => (S.ByteString -> m x) -> ByteString m r -> m r
-chunkMapM_ f bs = dematerialize bs return (\bs mr -> f bs >> mr) join
+chunkMapM_ f bs = dematerialize bs return (\bs' mr -> f bs' >> mr) join
 {-# INLINE chunkMapM_ #-}
 
 
@@ -395,7 +397,7 @@ chunkMapM_ f bs = dematerialize bs return (\bs mr -> f bs >> mr) join
   -}
 chunkFold :: Monad m => (x -> S.ByteString -> x) -> x -> (x -> a) -> ByteString m r -> m (Of a r)
 chunkFold step begin done = go begin
-  where go a _ | a `seq` False = undefined
+  where go a _            | a `seq` False = undefined
         go a (Empty r)    = return (done a :> r)
         go a (Chunk c cs) = go (step a c) cs
         go a (Go m)       = m >>= go a
@@ -453,7 +455,7 @@ unfoldMChunks step = loop where
   loop s = Go $ do
     m <- step s
     case m of
-      Nothing -> return (Empty ())
+      Nothing      -> return (Empty ())
       Just (bs,s') -> return $ Chunk bs (loop s')
 {-# INLINABLE unfoldMChunks #-}
 
@@ -462,7 +464,7 @@ unfoldrChunks step = loop where
   loop !s = Go $ do
     m <- step s
     case m of
-      Left r -> return (Empty r)
+      Left r        -> return (Empty r)
       Right (bs,s') -> return $ Chunk bs (loop s')
 {-# INLINABLE unfoldrChunks #-}
 
@@ -535,8 +537,8 @@ copy
      ByteString m r -> ByteString (ByteString m) r
 copy = loop where
   loop str = case str of
-    Empty r         -> Empty r
-    Go m            -> Go (liftM loop (lift m))
-    Chunk bs rest   -> Chunk bs (Go (Chunk bs (Empty (loop rest))))
+    Empty r       -> Empty r
+    Go m          -> Go (liftM loop (lift m))
+    Chunk bs rest -> Chunk bs (Go (Chunk bs (Empty (loop rest))))
 
 {-# INLINABLE copy #-}

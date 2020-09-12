@@ -1,5 +1,7 @@
-{-# LANGUAGE CPP, BangPatterns #-}
-{-# LANGUAGE RankNTypes, GADTs #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP          #-}
+{-# LANGUAGE GADTs        #-}
+{-# LANGUAGE RankNTypes   #-}
 -- This library emulates Data.ByteString.Lazy but includes a monadic element
 -- and thus at certain points uses a `Stream`/`FreeT` type in place of lists.
 
@@ -186,43 +188,40 @@ module Data.ByteString.Streaming (
     , chunkMapM_
   ) where
 
-import Prelude hiding
-    (reverse,head,tail,last,init,null,length,map,lines,foldl,foldr,unlines
-    ,concat,any,take,drop,splitAt,takeWhile,dropWhile,span,break,elem,filter,maximum
-    ,minimum,all,concatMap,foldl1,foldr1,scanl, scanl1, scanr, scanr1
-    ,repeat, cycle, interact, iterate,readFile,writeFile,appendFile,replicate
-    ,getContents,getLine,putStr,putStrLn ,zip,zipWith,unzip,notElem)
+import qualified Data.ByteString.Lazy.Internal as BI
+import qualified Data.List as L
+import           Prelude hiding
+    (all, any, appendFile, break, concat, concatMap, cycle, drop, dropWhile,
+    elem, filter, foldl, foldl1, foldr, foldr1, getContents, getLine, head,
+    init, interact, iterate, last, length, lines, map, maximum, minimum,
+    notElem, null, putStr, putStrLn, readFile, repeat, replicate, reverse,
+    scanl, scanl1, scanr, scanr1, span, splitAt, tail, take, takeWhile,
+    unlines, unzip, writeFile, zip, zipWith)
 import qualified Prelude
-import qualified Data.List              as L  -- L for list/lazy
-import qualified Data.ByteString.Lazy.Internal as BI  -- just for fromChunks etc
 
-import qualified Data.ByteString        as P  (ByteString) -- type name only
-import qualified Data.ByteString        as S  -- S for strict (hmm...)
+import qualified Data.ByteString as P (ByteString)
+import qualified Data.ByteString as S
+import           Data.ByteString.Builder.Internal hiding
+    (append, defaultChunkSize, empty, hPut)
 import qualified Data.ByteString.Internal as S
 import qualified Data.ByteString.Unsafe as S
-import Data.ByteString.Builder.Internal hiding (hPut, defaultChunkSize, empty, append)
 
-import Data.ByteString.Streaming.Internal
-import Streaming hiding (concats, unfold, distribute, mwrap)
-import Streaming.Internal (Stream (..))
+import           Data.ByteString.Streaming.Internal
+import           Streaming hiding (concats, distribute, unfold)
+import           Streaming.Internal (Stream(..))
 import qualified Streaming.Prelude as SP
 
 
-import Control.Monad            (liftM, forever)
-import Data.Monoid              (Monoid(..))
-import Data.Word                (Word8)
-import Data.Int                 (Int64)
-import System.IO                (Handle,openBinaryFile,IOMode(..)
-                                ,hClose)
+import           Control.Monad (forever)
+import           Control.Monad.Trans.Resource
+import           Data.Int (Int64)
+import           Data.Word (Word8)
+import           Foreign.ForeignPtr (withForeignPtr)
+import           Foreign.Ptr
+import           Foreign.Storable
+import           System.IO (Handle, IOMode(..), hClose, openBinaryFile)
 import qualified System.IO as IO (stdin, stdout)
-import System.IO.Error          (mkIOError, illegalOperationErrorType)
-import Control.Exception        (bracket)
-import Foreign.ForeignPtr       (withForeignPtr)
-import Foreign.Storable
-import Foreign.Ptr
-import Data.Functor.Compose
-import Data.Functor.Sum
-import Control.Monad.Trans.Resource
+import           System.IO.Error (illegalOperationErrorType, mkIOError)
 
 -- | /O(n)/ Concatenate a stream of byte streams.
 concat :: Monad m => Stream (ByteString m) m r -> ByteString m r
@@ -544,7 +543,7 @@ cons c cs = Chunk (S.singleton c) cs
 --
 cons' :: Word8 -> ByteString m r -> ByteString m r
 cons' w (Chunk c cs) | S.length c < 16 = Chunk (S.cons w c) cs
-cons' w cs                             = Chunk (S.singleton w) cs
+cons' w cs           = Chunk (S.singleton w) cs
 {-# INLINE cons' #-}
 -- --
 -- | /O(n\/c)/ Append a byte to the end of a 'ByteString'
@@ -603,9 +602,9 @@ nextByte (Go m) = m >>= nextByte
 
 unconsChunk :: Monad m => ByteString m r -> m (Maybe (S.ByteString, ByteString m r))
 unconsChunk = \bs -> case bs of
-  Empty _ -> return Nothing
+  Empty _    -> return Nothing
   Chunk c cs -> return (Just (c,cs))
-  Go m ->  m >>= unconsChunk
+  Go m       ->  m >>= unconsChunk
 {-# INLINABLE unconsChunk #-}
 
 nextChunk :: Monad m => ByteString m r -> m (Either r (S.ByteString, ByteString m r))
@@ -643,13 +642,13 @@ last (Chunk c0 cs0) = go c0 cs0
 {-# INLINABLE last #-}
 
 
-isPrefixOf :: Monad m => S.ByteString -> ByteString m r -> m (Sum (ByteString m) (ByteString m) r)
-isPrefixOf bytes bs = do
-  let len = S.length bytes
-  (bytes' :> rest) <- toStrict $ splitAt (fromIntegral len) bs
-  if bytes' == bytes
-    then return $ InR $ chunk bytes' >> rest
-    else return $ InL $ chunk bytes' >> rest
+-- isPrefixOf :: Monad m => S.ByteString -> ByteString m r -> m (Sum (ByteString m) (ByteString m) r)
+-- isPrefixOf bytes bs = do
+--   let len = S.length bytes
+--   (bytes' :> rest) <- toStrict $ splitAt (fromIntegral len) bs
+--   if bytes' == bytes
+--     then return $ InR $ chunk bytes' >> rest
+--     else return $ InL $ chunk bytes' >> rest
 -- -- | /O(n\/c)/ Return all the elements of a 'ByteString' except the last one.
 -- init :: ByteString -> ByteString
 -- init Empty          = errorEmptyStream "init"
@@ -730,12 +729,12 @@ foldr k  = foldrChunks (flip (S.foldr k))
 -- ByteString using the binary operator, from left to right.
 -- We use the style of the foldl libarary for left folds
 fold :: Monad m => (x -> Word8 -> x) -> x -> (x -> b) -> ByteString m () -> m b
-fold step0 begin done p0 = loop p0 begin
+fold step0 begin finish p0 = loop p0 begin
   where
     loop p !x = case p of
         Chunk bs bss -> loop bss $! S.foldl' step0 x bs
         Go    m      -> m >>= \p' -> loop p' x
-        Empty _      -> return (done x)
+        Empty _      -> return (finish x)
 {-# INLINABLE fold #-}
 
 
@@ -743,12 +742,12 @@ fold step0 begin done p0 = loop p0 begin
 --   simultaneous folds over a segmented bytestream
 
 fold_ :: Monad m => (x -> Word8 -> x) -> x -> (x -> b) -> ByteString m r -> m (Of b r)
-fold_ step0 begin done p0 = loop p0 begin
+fold_ step0 begin finish p0 = loop p0 begin
   where
     loop p !x = case p of
         Chunk bs bss -> loop bss $! S.foldl' step0 x bs
-        Go    m    -> m >>= \p' -> loop p' x
-        Empty r      -> return (done x :> r)
+        Go    m      -> m >>= \p' -> loop p' x
+        Empty r      -> return (finish x :> r)
 {-# INLINABLE fold_ #-}
 
 --
@@ -1053,11 +1052,11 @@ takeWhile f cs0 = takeWhile' cs0
 
 -- | 'dropWhile' @p xs@ returns the suffix remaining after 'takeWhile' @p xs@.
 dropWhile :: Monad m => (Word8 -> Bool) -> ByteString m r -> ByteString m r
-dropWhile pred = drop' where
+dropWhile p = drop' where
   drop' bs = case bs of
     Empty r    -> Empty r
     Go m       -> Go (liftM drop' m)
-    Chunk c cs -> case findIndexOrEnd (not.pred) c of
+    Chunk c cs -> case findIndexOrEnd (not . p) c of
         0                  -> Chunk c cs
         n | n < S.length c -> Chunk (S.drop n c) cs
           | otherwise      -> drop' cs
@@ -1712,8 +1711,8 @@ zipWithStream op zs = loop zs
   where
     loop [] !ls      = loop zs ls
     loop a@(x:xs)  ls = case ls of
-      Return r -> Return r
-      Step fls -> Step $ fmap (loop xs) (op x fls)
+      Return r   -> Return r
+      Step fls   -> Step $ fmap (loop xs) (op x fls)
       Effect mls -> Effect $ liftM (loop a) mls
 
 {-# INLINABLE zipWithStream #-}

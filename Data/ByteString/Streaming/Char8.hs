@@ -1,5 +1,8 @@
-{-# LANGUAGE CPP, BangPatterns #-}
-{-# LANGUAGE RankNTypes, OverloadedStrings, ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns        #-}
+{-# LANGUAGE CPP                 #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE RankNTypes          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 -- | This library emulates "Data.ByteString.Lazy.Char8" but includes a monadic element
 --   and thus at certain points uses a `Stream`/`FreeT` type in place of lists.
 --   See the documentation for @Data.ByteString.Streaming@ and the examples of
@@ -154,61 +157,51 @@ module Data.ByteString.Streaming.Char8 (
     , dematerialize
   ) where
 
-import Prelude hiding
-    (reverse,head,tail,last,init,null,length,map,words, lines,foldl,foldr, unwords, unlines
-    ,concat,any,take,drop,splitAt,takeWhile,dropWhile,span,break,elem,filter,maximum
-    ,minimum,all,concatMap,foldl1,foldr1,scanl, scanl1, scanr, scanr1
-    ,repeat, cycle, interact, iterate,readFile,writeFile,appendFile,replicate
-    ,getContents,getLine,putStr,putStrLn ,zip,zipWith,unzip,notElem)
+import           Prelude hiding
+    (all, any, appendFile, break, concat, concatMap, cycle, drop, dropWhile,
+    elem, filter, foldl, foldl1, foldr, foldr1, getContents, getLine, head,
+    init, interact, iterate, last, length, lines, map, maximum, minimum,
+    notElem, null, putStr, putStrLn, readFile, repeat, replicate, reverse,
+    scanl, scanl1, scanr, scanr1, span, splitAt, tail, take, takeWhile,
+    unlines, unwords, unzip, words, writeFile, zip, zipWith)
 import qualified Prelude
 
-import qualified Data.ByteString        as B
-import qualified Data.ByteString.Internal as B
-import Data.ByteString.Internal (c2w,w2c)
-import qualified Data.ByteString.Unsafe as B
+import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as Char8
+import           Data.ByteString.Internal (c2w, w2c)
+import qualified Data.ByteString.Internal as B
+import qualified Data.ByteString.Unsafe as B
 
-import Streaming hiding (concats, unfold, distribute, mwrap)
-import Streaming.Internal (Stream (..))
+import           Streaming hiding (concats, distribute, unfold)
+import           Streaming.Internal (Stream(..))
 import qualified Streaming.Prelude as S
-import qualified Streaming as S
 
 import qualified Data.ByteString.Streaming as R
-import Data.ByteString.Streaming.Internal
+import           Data.ByteString.Streaming.Internal
 
-import Data.ByteString.Streaming
-    (fromLazy, toLazy, toLazy_, nextChunk, unconsChunk,
-    fromChunks, toChunks, fromStrict, toStrict, toStrict_,
-    concat, distribute, effects, drained, mwrap, toStreamingByteStringWith,
-    toStreamingByteString, toBuilder, concatBuilders,
-    empty, null, nulls, null_, testNull, length, length_, append, cycle,
-    take, drop, splitAt, intercalate, group, denull,
-    appendFile, stdout, stdin, fromHandle, toHandle,
-    hGetContents, hGetContentsN, hGet, hGetN, hPut,
-    getContents, hGetNonBlocking,
-    hGetNonBlockingN, readFile, writeFile, interact,
-    chunkFold, chunkFoldM, chunkMap, chunkMapM)
+import           Data.ByteString.Streaming
+    (append, appendFile, concat, concatBuilders, cycle, denull, distribute,
+    drained, drop, effects, empty, fromChunks, fromHandle, fromLazy,
+    fromStrict, getContents, group, hGet, hGetContents, hGetContentsN, hGetN,
+    hGetNonBlocking, hGetNonBlockingN, hPut, interact, intercalate, length,
+    length_, nextChunk, null, null_, nulls, readFile, splitAt, stdin, stdout,
+    take, testNull, toBuilder, toChunks, toHandle, toLazy, toLazy_,
+    toStreamingByteString, toStreamingByteStringWith, toStrict, toStrict_,
+    unconsChunk, writeFile)
  --   hPutNonBlocking,
 
-import Control.Monad            (liftM)
-import System.IO                (Handle,openBinaryFile,IOMode(..)
-                                ,hClose)
-import qualified System.IO  as IO
-import System.IO.Unsafe
-import Control.Exception        (bracket)
-import Data.Char (isDigit)
-import Data.Word (Word8)
-import Foreign.ForeignPtr       (withForeignPtr)
-import Foreign.Ptr
-import Foreign.Storable
-import Data.Functor.Compose
-import Data.Functor.Sum
-import qualified Data.List as L
+import           Data.Char (isDigit)
+import           Data.Word (Word8)
+import           Foreign.ForeignPtr (withForeignPtr)
+import           Foreign.Ptr
+import           Foreign.Storable
+import qualified System.IO as IO
+import           System.IO.Unsafe
 
 unpack ::  Monad m => ByteString m r ->  Stream (Of Char) m r
 unpack bs = case bs of
-    Empty r -> Return r
-    Go m    -> Effect (liftM unpack m)
+    Empty r    -> Return r
+    Go m       -> Effect (liftM unpack m)
     Chunk c cs -> unpackAppendCharsLazy c (unpack cs)
   where
   unpackAppendCharsLazy :: B.ByteString -> Stream (Of Char) m r -> Stream (Of Char) m r
@@ -262,7 +255,7 @@ singleton = R.singleton . c2w
 --
 cons' :: Char -> ByteString m r -> ByteString m r
 cons' c (Chunk bs bss) | B.length bs < 16 = Chunk (B.cons (c2w c) bs) bss
-cons' c cs                                = Chunk (B.singleton (c2w c)) cs
+cons' c cs             = Chunk (B.singleton (c2w c)) cs
 {-# INLINE cons' #-}
 --
 -- | /O(n\/c)/ Append a byte to the end of a 'ByteString'
@@ -343,7 +336,7 @@ fold_ step begin done p0 = loop p0 begin
   where
     loop p !x = case p of
         Chunk bs bss -> loop bss $! Char8.foldl' step x bs
-        Go    m    -> m >>= \p' -> loop p' x
+        Go    m      -> m >>= \p' -> loop p' x
         Empty _      -> return (done x)
 {-# INLINABLE fold_ #-}
 
@@ -353,7 +346,7 @@ fold step begin done p0 = loop p0 begin
   where
     loop p !x = case p of
         Chunk bs bss -> loop bss $! Char8.foldl' step x bs
-        Go    m    -> m >>= \p' -> loop p' x
+        Go    m      -> m >>= \p' -> loop p' x
         Empty r      -> return (done x :> r)
 {-# INLINABLE fold #-}
 -- ---------------------------------------------------------------------
@@ -403,8 +396,8 @@ repeat = R.repeat . c2w
 unfoldM :: Monad m => (a -> Maybe (Char, a)) -> a -> ByteString m ()
 unfoldM f = R.unfoldM go where
   go a = case f a of
-    Nothing    -> Nothing
-    Just (c,a) -> Just (c2w c, a)
+    Nothing     -> Nothing
+    Just (c,a') -> Just (c2w c, a')
 {-# INLINE unfoldM #-}
 
 
@@ -566,7 +559,7 @@ unlines = loop where
       let bs = unlines st
       case bs of
         Chunk "" (Empty r)   -> Empty r
-        Chunk "\n" (Empty r) -> bs
+        Chunk "\n" (Empty _) -> bs
         _                    -> cons' '\n' bs
     Effect m  -> Go (liftM unlines m)
 {-# INLINABLE unlines #-}
@@ -584,7 +577,7 @@ words =  filtered . R.splitWith B.isSpaceWord8
   filtered stream = case stream of
     Return r -> Return r
     Effect m -> Effect (liftM filtered m)
-    Step bs -> Effect $ bs_loop bs
+    Step bs  -> Effect $ bs_loop bs
   bs_loop bs = case bs of
       Empty r -> return $ filtered r
       Go m ->  m >>= bs_loop
@@ -701,7 +694,7 @@ nextChar :: Monad m => ByteString m r -> m (Either r (Char, ByteString m r))
 nextChar b = do
   e <- R.nextByte b
   case e of
-    Left r -> return $! Left r
+    Left r       -> return $! Left r
     Right (w,bs) -> return $! Right (w2c w, bs)
 
 putStr :: MonadIO m => ByteString m r -> m r
