@@ -232,7 +232,7 @@ test-suite test
     , transformers
     , tasty >= 0.11.0.4
     , tasty-smallcheck >= 0.8.1
-    , tasty-hunit >= 0.10
+    , tasty-hunit >= 0.9
     , smallcheck >= 1.1.1
     , streaming
     , streaming-bytestring
