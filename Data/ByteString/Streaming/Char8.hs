@@ -196,7 +196,6 @@ import           Foreign.ForeignPtr (withForeignPtr)
 import           Foreign.Ptr
 import           Foreign.Storable
 import qualified System.IO as IO
-import           System.IO.Unsafe (unsafeDupablePerformIO)
 
 unpack ::  Monad m => ByteString m r ->  Stream (Of Char) m r
 unpack bs = case bs of
@@ -213,7 +212,7 @@ unpack bs = case bs of
 
   unpackAppendCharsStrict :: B.ByteString -> Stream (Of Char) m r -> Stream (Of Char) m r
   unpackAppendCharsStrict (B.PS fp off len) xs =
-    unsafeDupablePerformIO $ withForeignPtr fp $ \base -> do
+    B.accursedUnutterablePerformIO $ withForeignPtr fp $ \base -> do
          loop (base `plusPtr` (off-1)) (base `plusPtr` (off-1+len)) xs
      where
        loop !sentinal !p acc
@@ -658,7 +657,7 @@ nthNewLine :: B.ByteString   -- input chunk
            -> Int            -- remaining number of newlines wanted
            -> Either Int Int -- Left count, else Right length
 nthNewLine (B.PS fp off len) targetLines =
-    unsafeDupablePerformIO $ withForeignPtr fp $ \base ->
+    B.accursedUnutterablePerformIO $ withForeignPtr fp $ \base ->
     loop (base `plusPtr` off) targetLines 0 len
   where
     loop :: Ptr Word8 -> Int -> Int -> Int -> IO (Either Int Int)
