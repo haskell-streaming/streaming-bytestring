@@ -165,6 +165,7 @@ extra-source-files:
   README.md
   CHANGELOG.md
   tests/sample.txt
+  tests/groupBy.txt
 
 stability:          Experimental
 homepage:           https://github.com/haskell-streaming/streaming-bytestring
