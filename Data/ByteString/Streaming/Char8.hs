@@ -200,7 +200,7 @@ import qualified System.IO as IO
 unpack ::  Monad m => ByteString m r ->  Stream (Of Char) m r
 unpack bs = case bs of
     Empty r    -> Return r
-    Go m       -> Effect (liftM unpack m)
+    Go m       -> Effect (fmap unpack m)
     Chunk c cs -> unpackAppendCharsLazy c (unpack cs)
   where
   unpackAppendCharsLazy :: B.ByteString -> Stream (Of Char) m r -> Stream (Of Char) m r
@@ -225,7 +225,7 @@ unpack bs = case bs of
 -- | /O(n)/ Convert a stream of separate characters into a packed byte stream.
 pack :: Monad m => Stream (Of Char) m r -> ByteString m r
 pack  = fromChunks
-        . mapped (liftM (\(str :> r) -> Char8.pack str :> r) . S.toList)
+        . mapped (fmap (\(str :> r) -> Char8.pack str :> r) . S.toList)
         . chunksOf 32
 {-# INLINABLE pack #-}
 
@@ -264,22 +264,22 @@ snoc cs = R.snoc cs . c2w
 
 -- | /O(1)/ Extract the first element of a ByteString, which must be non-empty.
 head_ :: Monad m => ByteString m r -> m Char
-head_ = liftM (w2c) . R.head_
+head_ = fmap w2c . R.head_
 {-# INLINE head_ #-}
 
 -- | /O(1)/ Extract the first element of a ByteString, which may be non-empty
 head :: Monad m => ByteString m r -> m (Of (Maybe Char) r)
-head = liftM (\(m:>r) -> fmap w2c m :> r) . R.head
+head = fmap (\(m:>r) -> fmap w2c m :> r) . R.head
 {-# INLINE head #-}
 
 -- | /O(n\/c)/ Extract the last element of a ByteString, which must be finite
 -- and non-empty.
 last_ :: Monad m => ByteString m r -> m Char
-last_ = liftM (w2c) . R.last_
+last_ = fmap w2c . R.last_
 {-# INLINE last_ #-}
 
 last :: Monad m => ByteString m r -> m (Of (Maybe Char) r)
-last = liftM (\(m:>r) -> fmap (w2c) m :> r) . R.last
+last = fmap (\(m:>r) -> fmap w2c m :> r) . R.last
 {-# INLINE last #-}
 
 groupBy :: Monad m => (Char -> Char -> Bool) -> ByteString m r -> Stream (ByteString m) m r
@@ -508,7 +508,7 @@ lines text0 = loop1 text0
     loop1 text =
       case text of
         Empty r -> Return r
-        Go m -> Effect $ liftM loop1 m
+        Go m -> Effect $ fmap loop1 m
         Chunk c cs
           | B.null c -> loop1 cs
           | otherwise -> Step (loop2 False text)
@@ -518,7 +518,7 @@ lines text0 = loop1 text0
         Empty r -> if prevCr
           then Chunk (B.singleton 13) (Empty (Return r))
           else Empty (Return r)
-        Go m -> Go $ liftM (loop2 prevCr) m
+        Go m -> Go $ fmap (loop2 prevCr) m
         Chunk c cs ->
           case B.elemIndex 10 c of
             Nothing -> if B.null c
@@ -560,7 +560,7 @@ unlines = loop where
         Chunk "" (Empty r)   -> Empty r
         Chunk "\n" (Empty _) -> bs
         _                    -> cons' '\n' bs
-    Effect m  -> Go (liftM unlines m)
+    Effect m  -> Go (fmap unlines m)
 {-# INLINABLE unlines #-}
 
 -- | 'words' breaks a byte stream up into a succession of byte streams
@@ -575,7 +575,7 @@ words =  filtered . R.splitWith B.isSpaceWord8
  where
   filtered stream = case stream of
     Return r -> Return r
-    Effect m -> Effect (liftM filtered m)
+    Effect m -> Effect (fmap filtered m)
     Step bs  -> Effect $ bs_loop bs
   bs_loop bs = case bs of
       Empty r -> return $ filtered r
@@ -633,7 +633,7 @@ lineSplit !n0 text0 = loop1 text0
     loop1 text =
       case text of
         Empty r -> Return r
-        Go m -> Effect $ liftM loop1 m
+        Go m -> Effect $ fmap loop1 m
         Chunk c cs
           | B.null c -> loop1 cs
           | otherwise -> Step (loop2 0 text)
@@ -641,7 +641,7 @@ lineSplit !n0 text0 = loop1 text0
     loop2 !counter text =
       case text of
         Empty r -> Empty (Return r)
-        Go m -> Go $ liftM (loop2 counter) m
+        Go m -> Go $ fmap (loop2 counter) m
         Chunk c cs ->
           case nthNewLine c (n - counter) of
             Left  !i -> Chunk c (loop2 (counter + i) cs)

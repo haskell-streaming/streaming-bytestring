@@ -236,7 +236,7 @@ distribute
 distribute ls = dematerialize ls
              return
              (\bs x -> join $ lift $ Chunk bs (Empty x) )
-             (join . hoist (Go . liftM Empty))
+             (join . hoist (Go . fmap Empty))
 {-# INLINE distribute #-}
 
 {-| Perform the effects contained in an effectful bytestring, ignoring the bytes.
@@ -320,8 +320,8 @@ fromStrict bs | B.null bs = Empty ()
   ByteString into memory and then copies all the data. If possible, try to
   avoid converting back and forth between streaming and strict bytestrings.
 -}
-toStrict_ :: Monad m => ByteString m () -> m (B.ByteString)
-toStrict_ = liftM B.concat . SP.toList_ . toChunks
+toStrict_ :: Monad m => ByteString m () -> m B.ByteString
+toStrict_ = fmap B.concat . SP.toList_ . toChunks
 {-# INLINE toStrict_ #-}
 
 
@@ -337,7 +337,7 @@ toStrict_ = liftM B.concat . SP.toList_ . toChunks
 toStrict :: Monad m => ByteString m r -> m (Of B.ByteString r)
 toStrict bs = do
   (bss :> r) <- SP.toList (toChunks bs)
-  return $ (B.concat bss :> r)
+  return (B.concat bss :> r)
 {-# INLINE toStrict #-}
 
 {- |/O(c)/ Transmute a pseudo-pure lazy bytestring to its representation
@@ -361,10 +361,7 @@ fromLazy = BI.foldrChunks Chunk (Empty ())
 
 -}
 toLazy_ :: Monad m => ByteString m r -> m BI.ByteString
-toLazy_ bs = dematerialize bs
-                (\_ -> return (BI.Empty))
-                (\b mx -> liftM (BI.Chunk b) mx)
-                join
+toLazy_ bs = dematerialize bs (\_ -> return BI.Empty) (fmap . BI.Chunk) join
 {-# INLINE toLazy_ #-}
 
 {-| /O(n)/ Convert an effectful byte stream into a single lazy 'ByteString'
@@ -502,7 +499,7 @@ nulls (Chunk bs rest) = if B.null bs
 
 
 length_ :: Monad m => ByteString m r -> m Int
-length_  = liftM (\(n:> _) -> n) . foldlChunks (\n c -> n + fromIntegral (B.length c)) 0
+length_  = fmap (\(n:> _) -> n) . foldlChunks (\n c -> n + fromIntegral (B.length c)) 0
 {-# INLINE length_ #-}
 
 {-| /O(n\/c)/ 'length' returns the length of a byte stream as an 'Int'
@@ -570,7 +567,7 @@ head (Chunk c rest) = case B.uncons c of
   Nothing -> head rest
   Just (w,_) -> do
     r <- SP.effects $ toChunks rest
-    return $! (Just w) :> r
+    return $! Just w :> r
 head (Go m)      = m >>= head
 {-# INLINABLE head #-}
 
@@ -636,7 +633,7 @@ last (Empty r)      = return (Nothing :> r)
 last (Go m)         = m >>= last
 last (Chunk c0 cs0) = go c0 cs0
   where
-    go c (Empty r)    = return $ (Just (unsafeLast c) :> r)
+    go c (Empty r)    = return (Just (unsafeLast c) :> r)
     go _ (Chunk c cs) = go c cs
     go x (Go m)       = m >>= go x
 {-# INLINABLE last #-}
@@ -676,10 +673,7 @@ append xs ys = dematerialize xs (const ys) Chunk Go
 -- | /O(n)/ 'map' @f xs@ is the ByteString obtained by applying @f@ to each
 -- element of @xs@.
 map :: Monad m => (Word8 -> Word8) -> ByteString m r -> ByteString m r
-map f z = dematerialize z
-   Empty
-   (\bs x -> Chunk (B.map f bs) x)
-   Go
+map f z = dematerialize z Empty (Chunk . B.map f) Go
 -- map f s = go s
 --     where
 --         go (Empty r)    = Empty r
@@ -687,7 +681,7 @@ map f z = dematerialize z
 --             where
 --                 y  = B.map f x
 --                 ys = go xs
---         go (Go mbs) = Go (liftM go mbs)
+--         go (Go mbs) = Go (fmap go mbs)
 {-# INLINE map #-}
 --
 -- -- | /O(n)/ 'reverse' @xs@ returns the elements of @xs@ in reverse order.
@@ -702,7 +696,7 @@ map f z = dematerialize z
 -- It is analogous to the intersperse function on Streams.
 intersperse :: Monad m => Word8 -> ByteString m r -> ByteString m r
 intersperse _ (Empty r)    = Empty r
-intersperse w (Go m)       = Go (liftM (intersperse w) m)
+intersperse w (Go m)       = Go (fmap (intersperse w) m)
 intersperse w (Chunk c cs) = Chunk (B.intersperse w c)
                                    (dematerialize cs Empty (Chunk . intersperse') Go)
   where intersperse' :: P.ByteString -> P.ByteString
@@ -781,7 +775,7 @@ fold_ step0 begin finish p0 = loop p0 begin
 --   where
 --     go css (Empty m')   = to css
 --     go css (Chunk c cs) = Chunk c (go css cs)
---     go css (Go m)       = Go (liftM (go css) m)
+--     go css (Go m)       = Go (fmap (go css) m)
 --     to []               = Empty ()
 --     to (cs:css)         = go css cs
 
@@ -989,7 +983,7 @@ take i cs0         = take' i cs0
           if n < fromIntegral (B.length c)
             then Chunk (B.take (fromIntegral n) c) (Empty ())
             else Chunk c (take' (n - fromIntegral (B.length c)) cs)
-        take' n (Go m) = Go (liftM (take' n) m)
+        take' n (Go m) = Go (fmap (take' n) m)
 {-# INLINABLE take #-}
 
 {-| /O(n\/c)/ 'drop' @n xs@ returns the suffix of @xs@ after the first @n@
@@ -1010,7 +1004,7 @@ drop i cs0 = drop' i cs0
           if n < fromIntegral (B.length c)
             then Chunk (B.drop (fromIntegral n) c) cs
             else drop' (n - fromIntegral (B.length c)) cs
-        drop' n (Go m) = Go (liftM (drop' n) m)
+        drop' n (Go m) = Go (fmap (drop' n) m)
 {-# INLINABLE drop #-}
 
 
@@ -1032,7 +1026,7 @@ splitAt i cs0 = splitAt' i cs0
             then Chunk (B.take (fromIntegral n) c) $
                      Empty (Chunk (B.drop (fromIntegral n) c) cs)
             else Chunk c (splitAt' (n - fromIntegral (B.length c)) cs)
-        splitAt' n (Go m) = Go  (liftM (splitAt' n) m)
+        splitAt' n (Go m) = Go  (fmap (splitAt' n) m)
 {-# INLINABLE splitAt #-}
 
 -- | 'takeWhile', applied to a predicate @p@ and a ByteString @xs@,
@@ -1042,7 +1036,7 @@ takeWhile :: Monad m => (Word8 -> Bool) -> ByteString m r -> ByteString m ()
 takeWhile f cs0 = takeWhile' cs0
   where
     takeWhile' (Empty _)    = Empty ()
-    takeWhile' (Go m)       = Go $ liftM takeWhile' m
+    takeWhile' (Go m)       = Go $ fmap takeWhile' m
     takeWhile' (Chunk c cs) =
       case findIndexOrEnd (not . f) c of
         0                  -> Empty ()
@@ -1055,7 +1049,7 @@ dropWhile :: Monad m => (Word8 -> Bool) -> ByteString m r -> ByteString m r
 dropWhile p = drop' where
   drop' bs = case bs of
     Empty r    -> Empty r
-    Go m       -> Go (liftM drop' m)
+    Go m       -> Go (fmap drop' m)
     Chunk c cs -> case findIndexOrEnd (not . p) c of
         0                  -> Chunk c cs
         n | n < B.length c -> Chunk (B.drop n c) cs
@@ -1072,7 +1066,7 @@ break f cs0 = break' cs0
             n | n < B.length c -> Chunk (B.take n c) $
                                       Empty (Chunk (B.drop n c) cs)
               | otherwise      -> Chunk c (break' cs)
-        break' (Go m) = Go (liftM break' m)
+        break' (Go m) = Go (fmap break' m)
 {-# INLINABLE break #-}
 
 --
@@ -1131,7 +1125,7 @@ span p = break (not . p)
 --
 splitWith :: Monad m => (Word8 -> Bool) -> ByteString m r -> Stream (ByteString m) m r
 splitWith _ (Empty r)      = Return r
-splitWith p (Go m)         = Effect $ liftM (splitWith p) m
+splitWith p (Go m)         = Effect $ fmap (splitWith p) m
 splitWith p (Chunk c0 cs0) = comb [] (B.splitWith p c0) cs0
   where
 -- comb :: [P.ByteString] -> [P.ByteString] -> ByteString -> [ByteString]
@@ -1140,7 +1134,7 @@ splitWith p (Chunk c0 cs0) = comb [] (B.splitWith p c0) cs0
                                                  (Empty (Return r))
                                                  (s:acc)
   comb acc [s]    (Chunk c cs) = comb (s:acc) (B.splitWith p c) cs
-  comb acc b      (Go m)       = Effect (liftM (comb acc b) m)
+  comb acc b      (Go m)       = Effect (fmap (comb acc b) m)
   comb acc (s:ss) cs           = Step $ L.foldl' (flip Chunk)
                                                  (Empty (comb [] ss cs))
                                                  (s:acc)
@@ -1173,14 +1167,14 @@ split w = loop
   where
   loop !x = case x of
     Empty r      -> Return r
-    Go m         -> Effect $ liftM loop m
+    Go m         -> Effect $ fmap loop m
     Chunk c0 cs0 -> comb [] (B.split w c0) cs0
-  comb !acc [] (Empty r)       = Step $ revChunks acc (Return r)
-  comb acc [] (Chunk c cs)     = comb acc (B.split w c) cs
-  comb !acc (s:[]) (Empty r)   = Step $ revChunks (s:acc) (Return r)
-  comb acc (s:[]) (Chunk c cs) = comb (s:acc) (B.split w c) cs
-  comb acc b (Go m)            = Effect (liftM (comb acc b) m)
-  comb acc (s:ss) cs           = Step $ revChunks (s:acc) (comb [] ss cs)
+  comb !acc [] (Empty r)    = Step $ revChunks acc (Return r)
+  comb acc [] (Chunk c cs)  = comb acc (B.split w c) cs
+  comb !acc [s] (Empty r)   = Step $ revChunks (s:acc) (Return r)
+  comb acc [s] (Chunk c cs) = comb (s:acc) (B.split w c) cs
+  comb acc b (Go m)         = Effect (fmap (comb acc b) m)
+  comb acc (s:ss) cs        = Step $ revChunks (s:acc) (comb [] ss cs)
 {-# INLINABLE split #-}
 
 
@@ -1198,7 +1192,7 @@ group :: Monad m => ByteString m r -> Stream (ByteString m) m r
 group = go
   where
     go (Empty r)        = Return r
-    go (Go m)           = Effect $ liftM go m
+    go (Go m)           = Effect $ fmap go m
     go (Chunk c cs)
       | B.length c == 1 = Step $ to [c] (B.unsafeHead c) cs
       | otherwise       = Step $ to [B.unsafeTake 1 c] (B.unsafeHead c) (Chunk (B.unsafeTail c) cs)
@@ -1216,7 +1210,7 @@ groupBy :: Monad m => (Word8 -> Word8 -> Bool) -> ByteString m r -> Stream (Byte
 groupBy rel = go
   where
     go (Empty r)        = Return r
-    go (Go m)           = Effect $ liftM go m
+    go (Go m)           = Effect $ fmap go m
     go (Chunk c cs)
       | B.length c == 1 = Step $ to [c] (B.unsafeHead c) cs
       | otherwise       = Step $ to [B.unsafeTake 1 c] (B.unsafeHead c) (Chunk (B.unsafeTail c) cs)
@@ -1253,14 +1247,14 @@ groupBy rel = go
 -- argument between each element of the list.
 intercalate :: Monad m => ByteString m () -> Stream (ByteString m) m r -> ByteString m r
 intercalate _ (Return r) = Empty r
-intercalate s (Effect m) = Go $ liftM (intercalate s) m
+intercalate s (Effect m) = Go $ fmap (intercalate s) m
 intercalate s (Step bs0) = do  -- this isn't quite right
   ls <- bs0
   s
   intercalate s ls
  -- where
  --  loop (Return r) =  Empty r -- concat . (L.intersperse s)
- --  loop (Effect m) = Go $ liftM loop m
+ --  loop (Effect m) = Go $ fmap loop m
  --  loop (Step bs) = do
  --    ls <- bs
  --    case ls of
@@ -1274,7 +1268,7 @@ intercalate s (Step bs0) = do  -- this isn't quite right
 -- > count = length . elemIndices
 --
 count_ :: Monad m => Word8 -> ByteString m r -> m Int
-count_ w  = liftM (\(n :> _) -> n) . foldlChunks (\n c -> n + fromIntegral (B.count w c)) 0
+count_ w  = fmap (\(n :> _) -> n) . foldlChunks (\n c -> n + fromIntegral (B.count w c)) 0
 {-# INLINE count_ #-}
 
 -- But more efficiently than using length on the intermediate list.
@@ -1327,7 +1321,7 @@ filter p s = go s
     where
         go (Empty r )   = Empty r
         go (Chunk x xs) = consChunk (B.filter p x) (go xs)
-        go (Go m)       = Go (liftM go m)
+        go (Go m)       = Go (fmap go m)
                             -- should inspect for null
 {-# INLINABLE filter #-}
 
@@ -1606,7 +1600,7 @@ stdout = hPut IO.stdout
 --
 -- hPutNonBlocking ::  MonadIO m => Handle -> ByteString m r -> ByteString m r
 -- hPutNonBlocking _ (Empty r)         = Empty r
--- hPutNonBlocking h (Go m) = Go $ liftM (hPutNonBlocking h) m
+-- hPutNonBlocking h (Go m) = Go $ fmap (hPutNonBlocking h) m
 -- hPutNonBlocking h bs@(Chunk c cs) = do
 --   c' <- lift $ B.hPutNonBlocking h c
 --   case B.length c' of
@@ -1697,7 +1691,7 @@ zipWithStream op zs = loop zs
     loop a@(x:xs)  ls = case ls of
       Return r   -> Return r
       Step fls   -> Step $ fmap (loop xs) (op x fls)
-      Effect mls -> Effect $ liftM (loop a) mls
+      Effect mls -> Effect $ fmap (loop a) mls
 
 {-# INLINABLE zipWithStream #-}
 

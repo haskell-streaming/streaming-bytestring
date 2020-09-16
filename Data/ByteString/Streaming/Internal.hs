@@ -100,7 +100,7 @@ instance Monad m => Functor (ByteString m) where
   fmap f x = case x of
     Empty a      -> Empty (f a)
     Chunk bs bss -> Chunk bs (fmap f bss)
-    Go mbss      -> Go (liftM (fmap f) mbss)
+    Go mbss      -> Go (fmap (fmap f) mbss)
 
 instance Monad m => Applicative (ByteString m) where
   pure = Empty
@@ -117,33 +117,33 @@ instance Monad m => Monad (ByteString m) where
     loop !_ x = case x of   -- this seems to be insanely effective
       Empty _   -> y
       Chunk a b -> Chunk a (loop SPEC b)
-      Go m      -> Go (liftM (loop SPEC) m)
+      Go m      -> Go (fmap (loop SPEC) m)
   {-# INLINEABLE (>>) #-}
   x >>= f =
     -- case x of
     --   Empty a -> f a
     --   Chunk bs bss -> Chunk bs (bss >>= f)
-    --   Go mbss      -> Go (liftM (>>= f) mbss)
+    --   Go mbss      -> Go (fmap (>>= f) mbss)
     loop SPEC2 x where -- unlike >> this SPEC seems pointless
       loop !_ y = case y of
         Empty a      -> f a
         Chunk bs bss -> Chunk bs (loop SPEC bss)
-        Go mbss      -> Go (liftM (loop SPEC) mbss)
+        Go mbss      -> Go (fmap (loop SPEC) mbss)
   {-# INLINEABLE (>>=) #-}
 
 instance MonadIO m => MonadIO (ByteString m) where
-  liftIO io = Go (liftM Empty (liftIO io))
+  liftIO io = Go (fmap Empty (liftIO io))
   {-# INLINE liftIO #-}
 
 instance MonadTrans ByteString where
-  lift ma = Go $ liftM Empty ma
+  lift ma = Go $ fmap Empty ma
   {-# INLINE lift #-}
 
 instance MFunctor ByteString where
   hoist phi bs = case bs of
     Empty r        -> Empty r
     Chunk bs' rest -> Chunk bs' (hoist phi rest)
-    Go m           -> Go (phi (liftM (hoist phi) m))
+    Go m           -> Go (phi (fmap (hoist phi) m))
   {-# INLINABLE hoist #-}
 
 instance (r ~ ()) => IsString (ByteString m r) where
@@ -183,7 +183,7 @@ instance (MonadCatch m) => MonadCatch (ByteString m) where
       Go  m          -> Go (catch (do
           p' <- m
           return (go p'))
-       (\e -> return (f e)) )
+       (return . f))
   {-# INLINABLE catch #-}
 
 instance (MonadResource m) => MonadResource (ByteString m) where
@@ -199,7 +199,7 @@ bracketByteString alloc free inside = do
     clean key = loop where
       loop str = case str of
         Empty r       -> Go (release key >> return (Empty r))
-        Go m          -> Go (liftM loop m)
+        Go m          -> Go (fmap loop m)
         Chunk bs rest -> Chunk bs (loop rest)
 {-# INLINABLE bracketByteString #-}
 
@@ -249,7 +249,7 @@ dematerialize x0 nil cons mwrap' = loop SPEC x0
   loop !_ x = case x of
      Empty r    -> nil r
      Chunk b bs -> cons b (loop SPEC bs )
-     Go ms      -> mwrap' (liftM (loop SPEC) ms)
+     Go ms      -> mwrap' (fmap (loop SPEC) ms)
 {-# INLINE [1] dematerialize #-}
 
 {-# RULES
@@ -313,7 +313,7 @@ packBytes cs0 = do
     [] -> case rest of
       Return r -> Empty r
       Step as  -> packBytes (Step as)  -- these two pattern matches
-      Effect m -> Go $ liftM packBytes m -- should be evaded.
+      Effect m -> Go $ fmap packBytes m -- should be evaded.
     _  -> Chunk (B.packBytes bytes) (packBytes rest)
 {-# INLINABLE packBytes #-}
 
@@ -365,7 +365,7 @@ unsafeInit (B.PS ps s l) = B.PS ps s (l-1)
 foldrChunks :: Monad m => (B.ByteString -> a -> a) -> a -> ByteString m r -> m a
 foldrChunks step nil bs = dematerialize bs
   (\_ -> return nil)
-  (liftM . step)
+  (fmap . step)
   join
 {-# INLINE foldrChunks #-}
 
@@ -378,11 +378,11 @@ foldlChunks f z = go z
 {-# INLINABLE foldlChunks #-}
 
 chunkMap :: Monad m => (B.ByteString -> B.ByteString) -> ByteString m r -> ByteString m r
-chunkMap f bs = dematerialize bs return (\bs' bss -> Chunk (f bs') bss) Go
+chunkMap f bs = dematerialize bs return (Chunk . f) Go
 {-# INLINE chunkMap #-}
 
 chunkMapM :: Monad m => (B.ByteString -> m B.ByteString) -> ByteString m r -> ByteString m r
-chunkMapM f bs = dematerialize bs return (\bs' bss -> Go (liftM (flip Chunk bss) (f bs'))) Go
+chunkMapM f bs = dematerialize bs return (\bs' bss -> Go (fmap (`Chunk` bss) (f bs'))) Go
 {-# INLINE chunkMapM #-}
 
 chunkMapM_ :: Monad m => (B.ByteString -> m x) -> ByteString m r -> m r
@@ -430,10 +430,7 @@ foldlChunksM f z bs = z >>= \a -> go a bs
 
 -- | Consume the chunks of an effectful ByteString with a natural right monadic fold.
 foldrChunksM :: Monad m => (B.ByteString -> m a -> m a) -> m a -> ByteString m r -> m a
-foldrChunksM step nil bs = dematerialize bs
-  (\_ -> nil)
-  step
-  join
+foldrChunksM step nil bs = dematerialize bs (const nil) step join
 {-# INLINE foldrChunksM #-}
 
 unfoldrNE :: Int -> (a -> Either r (Word8, a)) -> a -> (B.ByteString, Either r a)
@@ -538,7 +535,7 @@ copy
 copy = loop where
   loop str = case str of
     Empty r       -> Empty r
-    Go m          -> Go (liftM loop (lift m))
+    Go m          -> Go (fmap loop (lift m))
     Chunk bs rest -> Chunk bs (Go (Chunk bs (Empty (loop rest))))
 
 {-# INLINABLE copy #-}
