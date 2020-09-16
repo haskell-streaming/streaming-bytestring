@@ -222,6 +222,7 @@ import           Foreign.Storable
 import           System.IO (Handle, IOMode(..), hClose, openBinaryFile)
 import qualified System.IO as IO (stdin, stdout)
 import           System.IO.Error (illegalOperationErrorType, mkIOError)
+import           System.IO.Unsafe (unsafeDupablePerformIO)
 
 -- | /O(n)/ Concatenate a stream of byte streams.
 concat :: Monad m => Stream (ByteString m) m r -> ByteString m r
@@ -1675,7 +1676,7 @@ revChunks cs r = L.foldl' (flip Chunk) (Empty r) cs
 -- of the string if no element is found, rather than Nothing.
 findIndexOrEnd :: (Word8 -> Bool) -> P.ByteString -> Int
 findIndexOrEnd k (S.PS x s l) =
-    inlinePerformIO $
+    unsafeDupablePerformIO $
       withForeignPtr x $ \f -> go (f `plusPtr` s) 0
   where
     go !ptr !n | n >= l    = return l

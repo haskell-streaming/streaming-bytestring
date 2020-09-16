@@ -196,7 +196,7 @@ import           Foreign.ForeignPtr (withForeignPtr)
 import           Foreign.Ptr
 import           Foreign.Storable
 import qualified System.IO as IO
-import           System.IO.Unsafe
+import           System.IO.Unsafe (unsafeDupablePerformIO)
 
 unpack ::  Monad m => ByteString m r ->  Stream (Of Char) m r
 unpack bs = case bs of
@@ -213,7 +213,7 @@ unpack bs = case bs of
 
   unpackAppendCharsStrict :: B.ByteString -> Stream (Of Char) m r -> Stream (Of Char) m r
   unpackAppendCharsStrict (B.PS fp off len) xs =
-    inlinePerformIO $ withForeignPtr fp $ \base -> do
+    unsafeDupablePerformIO $ withForeignPtr fp $ \base -> do
          loop (base `plusPtr` (off-1)) (base `plusPtr` (off-1+len)) xs
      where
        loop !sentinal !p acc

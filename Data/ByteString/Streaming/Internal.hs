@@ -37,7 +37,6 @@ module Data.ByteString.Streaming.Internal (
    , mwrap
    , unfoldrNE
    , reread
-   , inlinePerformIO
    , unsafeLast
    , unsafeInit
    , copy
@@ -339,7 +338,7 @@ unpackBytes bss = dematerialize bss
 
   unpackAppendBytesStrict :: S.ByteString -> Stream (Of Word8) m r -> Stream (Of Word8) m r
   unpackAppendBytesStrict (S.PS fp off len) xs =
-    inlinePerformIO $ withForeignPtr fp $ \base ->
+    unsafeDupablePerformIO $ withForeignPtr fp $ \base ->
       loop (base `plusPtr` (off-1)) (base `plusPtr` (off-1+len)) xs
     where
       loop !sentinal !p acc
@@ -361,9 +360,6 @@ unsafeLast (S.PS x s l) =
 unsafeInit :: S.ByteString -> S.ByteString
 unsafeInit (S.PS ps s l) = S.PS ps s (l-1)
 {-# INLINE unsafeInit #-}
-
-inlinePerformIO :: IO a -> a
-inlinePerformIO (IO m) = case m realWorld# of (# _, r #) -> r
 
 -- | Consume the chunks of an effectful ByteString with a natural right fold.
 foldrChunks :: Monad m => (S.ByteString -> a -> a) -> a -> ByteString m r -> m a
