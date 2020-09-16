@@ -1,1 +1,4 @@
 resolver: lts-16.14
+
+ghc-options:
+  $locals: -fmax-relevant-binds=0 -funclutter-valid-hole-fits
