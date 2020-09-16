@@ -1204,7 +1204,7 @@ group = go
       | otherwise       = Step $ to [S.unsafeTake 1 c] (S.unsafeHead c) (Chunk (S.unsafeTail c) cs)
 
     to acc !_ (Empty r) = revNonEmptyChunks acc (Empty (Return r))
-    to _ _ (Go _) = error "Impossible case"
+    to acc !w (Go m) = Go $ to acc w <$> m
     to acc !w (Chunk c cs) = case findIndexOrEnd (/= w) c of
       0 -> revNonEmptyChunks acc (Empty (go (Chunk c cs)))
       n | n == S.length c -> to (S.unsafeTake n c : acc) w cs
@@ -1222,7 +1222,7 @@ groupBy rel = go
       | otherwise       = Step $ to [S.unsafeTake 1 c] (S.unsafeHead c) (Chunk (S.unsafeTail c) cs)
 
     to acc !_ (Empty r) = revNonEmptyChunks acc (Empty (Return r))
-    to _ _ (Go _) = error "Impossible case"
+    to acc !w (Go m) = Go $ to acc w <$> m
     to acc !w (Chunk c cs) = case findIndexOrEnd (not . rel w) c of
       0 -> revNonEmptyChunks acc (Empty (go (Chunk c cs)))
       n | n == S.length c  -> to (S.unsafeTake n c : acc) w cs
