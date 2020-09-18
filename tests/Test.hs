@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications  #-}
 
 module Main ( main ) where
 
@@ -79,23 +78,23 @@ groupCrash = do
 
 groupCharOrder :: Assertion
 groupCharOrder = do
-  a <- S.toList_ . SM.mapsM Q8.toLazy $ Q8.group $ Q8.fromLazy @IO "1234"
+  a <- S.toList_ . SM.mapsM Q8.toLazy $ Q8.group $ Q8.fromLazy "1234"
   a @?= (["1", "2", "3", "4"] :: [BL.ByteString])
-  b <- S.toList_ . SM.mapsM Q8.toLazy $ Q8.group $ Q8.fromLazy @IO "1122"
+  b <- S.toList_ . SM.mapsM Q8.toLazy $ Q8.group $ Q8.fromLazy "1122"
   b @?= (["11", "22"] :: [BL.ByteString])
 
 groupByCharOrder :: Assertion
 groupByCharOrder = do
   -- What about when everything fits into one group?
-  y <- S.toList_ . SM.mapsM Q8.toLazy $ Q8.groupBy (\_ _ -> True) $ Q8.fromLazy @IO "abcd"
+  y <- S.toList_ . SM.mapsM Q8.toLazy $ Q8.groupBy (\_ _ -> True) $ Q8.fromLazy "abcd"
   y @?= ["abcd"]
   -- Prove it's not an issue with the Char-based wrapper.
-  z <- S.toList_ . SM.mapsM Q.toLazy $ Q.groupBy (\a b -> a - 1 == b) $ Q.fromLazy @IO "98764321"
+  z <- S.toList_ . SM.mapsM Q.toLazy $ Q.groupBy (\a b -> a - 1 == b) $ Q.fromLazy "98764321"
   z @?= ["98", "76", "43", "21"]
   -- Char-based variant
-  a <- S.toList_ . SM.mapsM Q8.toLazy $ Q8.groupBy (\a b -> succ a == b) $ Q8.fromLazy @IO "12346789"
+  a <- S.toList_ . SM.mapsM Q8.toLazy $ Q8.groupBy (\a b -> succ a == b) $ Q8.fromLazy "12346789"
   a @?= ["12", "34", "67", "89"]
-  b <- S.toList_ . SM.mapsM Q8.toLazy $ Q8.groupBy (on (==) (== '5')) $ Q8.fromLazy @IO "5678"
+  b <- S.toList_ . SM.mapsM Q8.toLazy $ Q8.groupBy (on (==) (== '5')) $ Q8.fromLazy "5678"
   b @?= ["5", "678"]
 
 goodFindIndex :: Assertion
