@@ -197,7 +197,6 @@ import           Prelude hiding
     notElem, null, putStr, putStrLn, readFile, repeat, replicate, reverse,
     scanl, scanl1, scanr, scanr1, span, splitAt, tail, take, takeWhile,
     unlines, unzip, writeFile, zip, zipWith)
-import qualified Prelude
 
 import qualified Data.ByteString as P (ByteString)
 import qualified Data.ByteString as B
@@ -210,7 +209,6 @@ import           Data.ByteString.Streaming.Internal
 import           Streaming hiding (concats, distribute, unfold)
 import           Streaming.Internal (Stream(..))
 import qualified Streaming.Prelude as SP
-
 
 import           Control.Monad (forever)
 import           Control.Monad.Trans.Resource
@@ -1209,18 +1207,20 @@ group = go
 groupBy :: Monad m => (Word8 -> Word8 -> Bool) -> ByteString m r -> Stream (ByteString m) m r
 groupBy rel = go
   where
+    -- go :: ByteString m r -> Stream (ByteString m) m r
     go (Empty r)        = Return r
     go (Go m)           = Effect $ fmap go m
     go (Chunk c cs)
       | B.length c == 1 = Step $ to [c] (B.unsafeHead c) cs
       | otherwise       = Step $ to [B.unsafeTake 1 c] (B.unsafeHead c) (Chunk (B.unsafeTail c) cs)
 
+    -- to :: [B.ByteString] -> Word8 -> ByteString m r -> ByteString m (Stream (ByteString m) m r)
     to acc !_ (Empty r) = revNonEmptyChunks acc (Empty (Return r))
     to acc !w (Go m) = Go $ to acc w <$> m
     to acc !w (Chunk c cs) = case findIndexOrEnd (not . rel w) c of
       0 -> revNonEmptyChunks acc (Empty (go (Chunk c cs)))
-      n | n == B.length c  -> to (B.unsafeTake n c : acc) w cs
-        | otherwise        -> revNonEmptyChunks (B.unsafeTake n c : acc) (Empty (go (Chunk (B.unsafeDrop n c) cs)))
+      n | n == B.length c -> to (B.unsafeTake n c : acc) w cs
+        | otherwise       -> revNonEmptyChunks (B.unsafeTake n c : acc) (Empty (go (Chunk (B.unsafeDrop n c) cs)))
 {-# INLINABLE groupBy #-}
 
 -- -- | The 'groupBy' function is the non-overloaded version of 'group'.
@@ -1650,7 +1650,7 @@ interact f = stdout (f stdin)
 -- {-# NOINLINE moduleError #-}
 
 revNonEmptyChunks :: [P.ByteString] -> ByteString m r -> ByteString m r
-revNonEmptyChunks = Prelude.foldr (\bs f -> Chunk bs . f) id
+revNonEmptyChunks = L.foldl' (\f bs -> Chunk bs . f) id
 {-# INLINE revNonEmptyChunks #-}
   -- loop p xs
   -- where
