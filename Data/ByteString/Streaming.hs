@@ -1665,19 +1665,6 @@ revNonEmptyChunks = Prelude.foldr (\bs f -> Chunk bs . f) id
 revChunks :: Monad m => [P.ByteString] -> r -> ByteString m r
 revChunks cs r = L.foldl' (flip Chunk) (Empty r) cs
 {-# INLINE revChunks #-}
--- | 'findIndexOrEnd' is a variant of findIndex, that returns the length
--- of the string if no element is found, rather than Nothing.
-findIndexOrEnd :: (Word8 -> Bool) -> P.ByteString -> Int
-findIndexOrEnd k (B.PS x s l) =
-    B.accursedUnutterablePerformIO $
-      withForeignPtr x $ \f -> go (f `plusPtr` s) 0
-  where
-    go !ptr !n | n >= l    = return l
-               | otherwise = do w <- peek ptr
-                                if k w
-                                  then return n
-                                  else go (ptr `plusPtr` 1) (n+1)
-{-# INLINABLE findIndexOrEnd #-}
 
 zipWithStream
   :: (Monad m)
