@@ -1,5 +1,6 @@
 module Main ( main ) where
 
+import           Control.Monad.Trans.Resource (runResourceT)
 import qualified Data.ByteString.Char8 as BS8
 import qualified Data.ByteString.Streaming.Char8 as SBS8
 import qualified Data.ByteString.Streaming.Internal as SBSI
@@ -13,7 +14,7 @@ import           Test.SmallCheck.Series
 import           Test.Tasty
 import           Test.Tasty.HUnit
 import           Test.Tasty.SmallCheck
-import           Text.Printf
+import           Text.Printf (printf)
 
 listOf :: Monad m => Series m a -> Series m [a]
 listOf a = decDepth $
@@ -63,6 +64,13 @@ handleIsOpen = do
   l @?= 73
   hIsOpen h >>= assertBool "Still expected file handle to be open!"
 
+groupCrash :: Assertion
+groupCrash = do
+  a <- runResourceT . S.sum_ . SM.mapsM SBS8.length . SBS8.group $ SBS8.readFile "tests/groupBy.txt"
+  a @?= 39925
+  b <- runResourceT . S.sum_ . SM.mapsM SBS8.length . SBS8.groupBy (\_ _ -> True) $ SBS8.readFile "tests/groupBy.txt"
+  b @?= 39925
+
 main :: IO ()
 main = defaultMain $ testGroup "Tests"
   [ testGroup "lines"
@@ -92,5 +100,6 @@ main = defaultMain $ testGroup "Tests"
     ]
   , testGroup "Unit Tests"
     [ testCase "hGetContents: Handle stays open" handleIsOpen
+    , testCase "group(By): Don't crash" groupCrash
     ]
   ]
