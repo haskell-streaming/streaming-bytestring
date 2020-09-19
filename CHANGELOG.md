@@ -9,12 +9,13 @@
 
 - An incorrect comment about `Handle`s being automatically closed upon EOF with
   `hGetContents` and `hGetContentsN`. [#9]
-- A critical bug in `group` and `groupBy` that would crash code when reading
-  enough bytes. [#22]
+- A crash in `group` and `groupBy` when reading too many bytes. [#22]
+- `groupBy` incorrectly ordering its output elements. [#4]
 
 [#9]: https://github.com/haskell-streaming/streaming-bytestring/issues/9
 [#18]: https://github.com/haskell-streaming/streaming-bytestring/pull/18
 [#22]: https://github.com/haskell-streaming/streaming-bytestring/pull/22
+[#4]: https://github.com/haskell-streaming/streaming-bytestring/issues/4
 
 ## 0.1.6
 
