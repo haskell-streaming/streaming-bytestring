@@ -2,6 +2,7 @@
 {-# LANGUAGE CPP          #-}
 {-# LANGUAGE GADTs        #-}
 {-# LANGUAGE RankNTypes   #-}
+
 -- This library emulates Data.ByteString.Lazy but includes a monadic element
 -- and thus at certain points uses a `Stream`/`FreeT` type in place of lists.
 
@@ -20,11 +21,10 @@
 -- and the @ghci@ examples especially in "Data.ByteString.Streaming.Char8".
 -- We begin with a slight modification of the documentation to "Data.ByteString.Lazy":
 --
--- A time and space-efficient implementation of effectful byte streams
--- using a stream of packed 'Word8' arrays, suitable for high performance
--- use, both in terms of large data quantities, or high speed
--- requirements. Streaming ByteStrings are encoded as streams of strict chunks
--- of bytes.
+-- A time and space-efficient implementation of effectful byte streams using a
+-- stream of packed 'Word8' arrays, suitable for high performance use, both in
+-- terms of large data quantities, or high speed requirements. Streaming
+-- ByteStrings are encoded as streams of strict chunks of bytes.
 --
 -- A key feature of streaming ByteStrings is the means to manipulate large or
 -- unbounded streams of data without requiring the entire sequence to be
@@ -34,24 +34,21 @@
 --
 -- Some operations, such as 'concat', 'append', 'reverse' and 'cons', have
 -- better complexity than their "Data.ByteString" equivalents, due to
--- optimisations resulting from the list spine structure. For other
--- operations streaming, like lazy, ByteStrings are usually within a few percent of
--- strict ones.
+-- optimisations resulting from the list spine structure. For other operations
+-- streaming, like lazy, ByteStrings are usually within a few percent of strict
+-- ones.
 --
--- This module is intended to be imported @qualified@, to avoid name
--- clashes with "Prelude" functions.  eg.
+-- This module is intended to be imported @qualified@, to avoid name clashes
+-- with "Prelude" functions. eg.
 --
--- > import qualified Data.ByteString.Streaming as B
+-- > import qualified Data.ByteString.Streaming as Q
 --
--- Original GHC implementation by Bryan O\'Sullivan.
--- Rewritten to use 'Data.Array.Unboxed.UArray' by Simon Marlow.
--- Rewritten to support slices and use 'Foreign.ForeignPtr.ForeignPtr'
--- by David Roundy.
--- Rewritten again and extended by Don Stewart and Duncan Coutts.
--- Lazy variant by Duncan Coutts and Don Stewart.
--- Streaming variant by Michael Thompson, following the ideas of Gabriel Gonzales'
--- pipes-bytestring
---
+-- Original GHC implementation by Bryan O\'Sullivan. Rewritten to use
+-- 'Data.Array.Unboxed.UArray' by Simon Marlow. Rewritten to support slices and
+-- use 'Foreign.ForeignPtr.ForeignPtr' by David Roundy. Rewritten again and
+-- extended by Don Stewart and Duncan Coutts. Lazy variant by Duncan Coutts and
+-- Don Stewart. Streaming variant by Michael Thompson, following the ideas of
+-- Gabriel Gonzales' pipes-bytestring.
 module Data.ByteString.Streaming (
     -- * The @ByteString@ type
     ByteString
@@ -188,8 +185,6 @@ module Data.ByteString.Streaming (
     , chunkMapM_
   ) where
 
-import qualified Data.ByteString.Lazy.Internal as BI
-import qualified Data.List as L
 import           Prelude hiding
     (all, any, appendFile, break, concat, concatMap, cycle, drop, dropWhile,
     elem, filter, foldl, foldl1, foldr, foldr1, getContents, getLine, head,
@@ -203,6 +198,7 @@ import qualified Data.ByteString as B
 import           Data.ByteString.Builder.Internal hiding
     (append, defaultChunkSize, empty, hPut)
 import qualified Data.ByteString.Internal as B
+import qualified Data.ByteString.Lazy.Internal as BI
 import qualified Data.ByteString.Unsafe as B
 
 import           Data.ByteString.Streaming.Internal
@@ -213,6 +209,7 @@ import qualified Streaming.Prelude as SP
 import           Control.Monad (forever)
 import           Control.Monad.Trans.Resource
 import           Data.Int (Int64)
+import qualified Data.List as L
 import           Data.Word (Word8)
 import           Foreign.ForeignPtr (withForeignPtr)
 import           Foreign.Ptr
@@ -226,8 +223,8 @@ concat :: Monad m => Stream (ByteString m) m r -> ByteString m r
 concat x = destroy x join Go Empty
 {-# INLINE concat #-}
 
--- |  Given a byte stream on a transformed monad, make it possible to \'run\'
---    transformer.
+-- | Given a byte stream on a transformed monad, make it possible to \'run\'
+-- transformer.
 distribute
   :: (Monad m, MonadTrans t, MFunctor t, Monad (t m), Monad (t (ByteString m)))
   => ByteString (t m) a -> t (ByteString m) a
@@ -237,9 +234,7 @@ distribute ls = dematerialize ls
              (join . hoist (Go . fmap Empty))
 {-# INLINE distribute #-}
 
-{-| Perform the effects contained in an effectful bytestring, ignoring the bytes.
-
--}
+-- | Perform the effects contained in an effectful bytestring, ignoring the bytes.
 effects :: Monad m => ByteString m r -> m r
 effects bs = case bs of
   Empty r      -> return r
@@ -247,141 +242,114 @@ effects bs = case bs of
   Chunk _ rest -> effects rest
 {-# INLINABLE effects #-}
 
-
-{-| Perform the effects contained in the second in an effectful pair of bytestrings,
-    ignoring the bytes. It would typically be used at the type
-
->  ByteString m (ByteString m r) -> ByteString m r
-
--}
-
+-- | Perform the effects contained in the second in an effectful pair of
+-- bytestrings, ignoring the bytes. It would typically be used at the type
+--
+-- > ByteString m (ByteString m r) -> ByteString m r
 drained :: (Monad m, MonadTrans t, Monad (t m)) => t m (ByteString m r) -> t m r
 drained t = t >>= lift . effects
+
 -- -----------------------------------------------------------------------------
 -- Introducing and eliminating 'ByteString's
 
-{-| /O(1)/ The empty 'ByteString' -- i.e. @return ()@ Note that @ByteString m w@ is
-  generally a monoid for monoidal values of @w@, like @()@
--}
+-- | /O(1)/ The empty 'ByteString' -- i.e. @return ()@ Note that @ByteString m w@ is
+-- generally a monoid for monoidal values of @w@, like @()@.
 empty :: ByteString m ()
 empty = Empty ()
 {-# INLINE empty #-}
 
-{-| /O(1)/ Yield a 'Word8' as a minimal 'ByteString'
--}
+-- | /O(1)/ Yield a 'Word8' as a minimal 'ByteString'.
 singleton :: Monad m => Word8 -> ByteString m ()
 singleton w = Chunk (B.singleton w)  (Empty ())
 {-# INLINE singleton #-}
 
-{-| /O(n)/ Convert a monadic stream of individual 'Word8's into a packed byte stream.
--}
+-- | /O(n)/ Convert a monadic stream of individual 'Word8's into a packed byte stream.
 pack :: Monad m => Stream (Of Word8) m r -> ByteString m r
 pack = packBytes
 {-# INLINE pack #-}
 
-{-| /O(n)/ Converts a packed byte stream into a stream of individual bytes.
--}
+-- | /O(n)/ Converts a packed byte stream into a stream of individual bytes.
 unpack ::  Monad m => ByteString m r -> Stream (Of Word8) m r
 unpack = unpackBytes
 
-{-| /O(c)/ Convert a monadic stream of individual strict 'ByteString'
-   chunks into a byte stream.
--}
+-- | /O(c)/ Convert a monadic stream of individual strict 'ByteString' chunks
+-- into a byte stream.
 fromChunks :: Monad m => Stream (Of P.ByteString) m r -> ByteString m r
-fromChunks cs = destroy cs
-  (\(bs :> rest) -> Chunk bs rest)
-  Go
-  return
+fromChunks cs = destroy cs (\(bs :> rest) -> Chunk bs rest) Go return
 {-# INLINE fromChunks #-}
 
-{-| /O(c)/ Convert a byte stream into a stream of individual strict bytestrings.
-    This of course exposes the internal chunk structure.
--}
+-- | /O(c)/ Convert a byte stream into a stream of individual strict
+-- bytestrings. This of course exposes the internal chunk structure.
 toChunks :: Monad m => ByteString m r -> Stream (Of P.ByteString) m r
-toChunks bs =
-  dematerialize bs
-      return
-      (\b mx -> Step (b:> mx))
-      Effect
+toChunks bs = dematerialize bs return (\b mx -> Step (b:> mx)) Effect
 {-# INLINE toChunks #-}
 
-{-| /O(1)/ yield a strict 'ByteString' chunk.
--}
+-- | /O(1)/ Yield a strict 'ByteString' chunk.
 fromStrict :: P.ByteString -> ByteString m ()
 fromStrict bs | B.null bs = Empty ()
-              | otherwise = Chunk bs  (Empty ())
+              | otherwise = Chunk bs (Empty ())
 {-# INLINE fromStrict #-}
 
-{-| /O(n)/ Convert a byte stream into a single strict 'ByteString'.
-
-  Note that this is an /expensive/ operation that forces the whole monadic
-  ByteString into memory and then copies all the data. If possible, try to
-  avoid converting back and forth between streaming and strict bytestrings.
--}
+-- | /O(n)/ Convert a byte stream into a single strict 'ByteString'.
+--
+-- Note that this is an /expensive/ operation that forces the whole monadic
+-- ByteString into memory and then copies all the data. If possible, try to
+-- avoid converting back and forth between streaming and strict bytestrings.
 toStrict_ :: Monad m => ByteString m () -> m B.ByteString
 toStrict_ = fmap B.concat . SP.toList_ . toChunks
 {-# INLINE toStrict_ #-}
 
-
-{-| /O(n)/ Convert a monadic byte stream into a single strict 'ByteString',
-   retaining the return value of the original pair. This operation is
-   for use with 'mapped'.
-
-> mapped R.toStrict :: Monad m => Stream (ByteString m) m r -> Stream (Of ByteString) m r
-
-   It is subject to all the objections one makes to Data.ByteString.Lazy 'toStrict';
-   all of these are devastating.
--}
+-- | /O(n)/ Convert a monadic byte stream into a single strict 'ByteString',
+-- retaining the return value of the original pair. This operation is for use
+-- with 'mapped'.
+--
+-- > mapped R.toStrict :: Monad m => Stream (ByteString m) m r -> Stream (Of ByteString) m r
+--
+-- It is subject to all the objections one makes to Data.ByteString.Lazy
+-- 'toStrict'; all of these are devastating.
 toStrict :: Monad m => ByteString m r -> m (Of B.ByteString r)
 toStrict bs = do
   (bss :> r) <- SP.toList (toChunks bs)
   return (B.concat bss :> r)
 {-# INLINE toStrict #-}
 
-{- |/O(c)/ Transmute a pseudo-pure lazy bytestring to its representation
-    as a monadic stream of chunks.
-
->>> Q.putStrLn $ Q.fromLazy "hi"
-hi
->>>  Q.fromLazy "hi"
-Chunk "hi" (Empty (()))  -- note: a 'show' instance works in the identity monad
->>>  Q.fromLazy $ BL.fromChunks ["here", "are", "some", "chunks"]
-Chunk "here" (Chunk "are" (Chunk "some" (Chunk "chunks" (Empty (())))))
-
--}
+-- |/O(c)/ Transmute a pseudo-pure lazy bytestring to its representation as a
+-- monadic stream of chunks.
+--
+-- >>> Q.putStrLn $ Q.fromLazy "hi"
+-- hi
+-- >>>  Q.fromLazy "hi"
+-- Chunk "hi" (Empty (()))  -- note: a 'show' instance works in the identity monad
+-- >>>  Q.fromLazy $ BL.fromChunks ["here", "are", "some", "chunks"]
+-- Chunk "here" (Chunk "are" (Chunk "some" (Chunk "chunks" (Empty (())))))
 fromLazy :: Monad m => BI.ByteString -> ByteString m ()
 fromLazy = BI.foldrChunks Chunk (Empty ())
 {-# INLINE fromLazy #-}
 
-{-| /O(n)/ Convert an effectful byte stream into a single lazy 'ByteString'
-    with the same internal chunk structure. See @toLazy@ which preserve
-    connectedness by keeping the return value of the effectful bytestring.
-
--}
+-- | /O(n)/ Convert an effectful byte stream into a single lazy 'ByteString'
+-- with the same internal chunk structure. See `toLazy` which preserve
+-- connectedness by keeping the return value of the effectful bytestring.
 toLazy_ :: Monad m => ByteString m r -> m BI.ByteString
 toLazy_ bs = dematerialize bs (\_ -> return BI.Empty) (fmap . BI.Chunk) join
 {-# INLINE toLazy_ #-}
 
-{-| /O(n)/ Convert an effectful byte stream into a single lazy 'ByteString'
-    with the same internal chunk structure, retaining the original
-    return value.
-
-    This is the canonical way of breaking streaming (@toStrict@ and the
-    like are far more demonic). Essentially one is dividing the interleaved
-    layers of effects and bytes into one immense layer of effects,
-    followed by the memory of the succession of bytes.
-
-    Because one preserves the return value, @toLazy@ is a suitable argument
-    for 'Streaming.mapped'
-
->   S.mapped Q.toLazy :: Stream (ByteString m) m r -> Stream (Of L.ByteString) m r
-
->>> Q.toLazy "hello"
-"hello" :> ()
->>> S.toListM $ traverses Q.toLazy $ Q.lines "one\ntwo\nthree\nfour\nfive\n"
-["one","two","three","four","five",""]  -- [L.ByteString]
-
--}
+-- | /O(n)/ Convert an effectful byte stream into a single lazy 'ByteString'
+-- with the same internal chunk structure, retaining the original return value.
+--
+-- This is the canonical way of breaking streaming (`toStrict` and the like are
+-- far more demonic). Essentially one is dividing the interleaved layers of
+-- effects and bytes into one immense layer of effects, followed by the memory
+-- of the succession of bytes.
+--
+-- Because one preserves the return value, `toLazy` is a suitable argument for
+-- 'Streaming.mapped':
+--
+-- > S.mapped Q.toLazy :: Stream (ByteString m) m r -> Stream (Of L.ByteString) m r
+--
+-- >>> Q.toLazy "hello"
+-- "hello" :> ()
+-- >>> S.toListM $ traverses Q.toLazy $ Q.lines "one\ntwo\nthree\nfour\nfive\n"
+-- ["one","two","three","four","five",""]  -- [L.ByteString]
 toLazy :: Monad m => ByteString m r -> m (Of BI.ByteString r)
 toLazy bs0 = dematerialize bs0
                 (\r -> return (BI.Empty :> r))
@@ -392,25 +360,20 @@ toLazy bs0 = dematerialize bs0
                 join
 {-# INLINE toLazy #-}
 
-
-
-
 -- ---------------------------------------------------------------------
 -- Basic interface
 --
 
-{- | Test whether a ByteString is empty, collecting its return value;
--- to reach the return value, this operation must check the whole length of the string.
-
->>> Q.null "one\ntwo\three\nfour\nfive\n"
-False :> ()
->>> Q.null ""
-True :> ()
->>> S.print $ mapped R.null $ Q.lines "yours,\nMeredith"
-False
-False
-
--}
+-- | Test whether a `ByteString` is empty, collecting its return value; to reach
+-- the return value, this operation must check the whole length of the string.
+--
+-- >>> Q.null "one\ntwo\three\nfour\nfive\n"
+-- False :> ()
+-- >>> Q.null ""
+-- True :> ()
+-- >>> S.print $ mapped R.null $ Q.lines "yours,\nMeredith"
+-- False
+-- False
 null :: Monad m => ByteString m r -> m (Of Bool r)
 null (Empty r)  = return (True :> r)
 null (Go m)     = m >>= null
@@ -421,16 +384,15 @@ null (Chunk bs rest) = if B.null bs
      return (False :> r)
 {-# INLINABLE null #-}
 
-{-| /O(1)/ Test whether an ByteString is empty. The value is of course in
-  the monad of the effects.
-
->>>  Q.null "one\ntwo\three\nfour\nfive\n"
-False
->>> Q.null $ Q.take 0 Q.stdin
-True
->>> :t Q.null $ Q.take 0 Q.stdin
-Q.null $ Q.take 0 Q.stdin :: MonadIO m => m Bool
--}
+-- | /O(1)/ Test whether a `ByteString` is empty. The value is of course in the
+-- monad of the effects.
+--
+-- >>>  Q.null "one\ntwo\three\nfour\nfive\n"
+-- False
+-- >>> Q.null $ Q.take 0 Q.stdin
+-- True
+-- >>> :t Q.null $ Q.take 0 Q.stdin
+-- Q.null $ Q.take 0 Q.stdin :: MonadIO m => m Bool
 null_ :: Monad m => ByteString m r -> m Bool
 null_ (Empty _)      = return True
 null_ (Go m)         = m >>= null_
@@ -439,7 +401,8 @@ null_ (Chunk bs rest) = if B.null bs
   else return False
 {-# INLINABLE null_ #-}
 
-
+-- | Similar to `null`, but yields the remainder of the `ByteString` stream when
+-- an answer has been determined.
 testNull :: Monad m => ByteString m r -> m (Of Bool (ByteString m r))
 testNull (Empty r)  = return (True :> Empty r)
 testNull (Go m)     = m >>= testNull
@@ -448,14 +411,10 @@ testNull p@(Chunk bs rest) = if B.null bs
    else return (False :> p)
 {-# INLINABLE testNull #-}
 
-{-| Remove empty ByteStrings from a stream of bytestrings.
-
--}
+-- | Remove empty ByteStrings from a stream of bytestrings.
 denull :: Monad m => Stream (ByteString m) m r -> Stream (ByteString m) m r
 denull = hoist (run . maps effects) . separate . mapped nulls
 {-# INLINE denull #-}
-
-
 
 {-| /O1/ Distinguish empty from non-empty lines, while maintaining streaming;
     the empty ByteStrings are on the right
@@ -482,11 +441,7 @@ Q.effects . Q.concat
 
 >>> hoist (Q.effects . Q.concat) . separate . mapped Q.nulls
   :: Monad n =>  Stream (Q.ByteString n) n b -> Stream (Q.ByteString n) n b
-
-
-
 -}
-
 nulls :: Monad m => ByteString m r -> m (Sum (ByteString m) (ByteString m) r)
 nulls (Empty r)  = return (InR (return r))
 nulls (Go m)     = m >>= nulls
@@ -495,39 +450,35 @@ nulls (Chunk bs rest) = if B.null bs
    else return (InL (Chunk bs rest))
 {-# INLINABLE nulls #-}
 
-
+-- | Like `length`, report the length in bytes of the `ByteString` by running
+-- through its contents. Since the return value is in the effect @m@, this is
+-- one way to "get out" of the stream.
 length_ :: Monad m => ByteString m r -> m Int
-length_  = fmap (\(n:> _) -> n) . foldlChunks (\n c -> n + fromIntegral (B.length c)) 0
+length_ = fmap (\(n:> _) -> n) . foldlChunks (\n c -> n + fromIntegral (B.length c)) 0
 {-# INLINE length_ #-}
 
-{-| /O(n\/c)/ 'length' returns the length of a byte stream as an 'Int'
-    together with the return value. This makes various maps possible
-
->>> Q.length "one\ntwo\three\nfour\nfive\n"
-23 :> ()
->>> S.print $ S.take 3 $ mapped Q.length $ Q.lines "one\ntwo\three\nfour\nfive\n"
-3
-8
-4
--}
+-- | /O(n\/c)/ 'length' returns the length of a byte stream as an 'Int' together
+-- with the return value. This makes various maps possible.
+--
+-- >>> Q.length "one\ntwo\three\nfour\nfive\n"
+-- 23 :> ()
+-- >>> S.print $ S.take 3 $ mapped Q.length $ Q.lines "one\ntwo\three\nfour\nfive\n"
+-- 3
+-- 8
+-- 4
 length :: Monad m => ByteString m r -> m (Of Int r)
-length cs = foldlChunks (\n c -> n + fromIntegral (B.length c)) 0 cs
+length = foldlChunks (\n c -> n + fromIntegral (B.length c)) 0
 {-# INLINE length #-}
 
--- infixr 5 `cons` -- , `cons'` --same as list (:)
--- -- nfixl 5 `snoc`
---
 -- | /O(1)/ 'cons' is analogous to '(:)' for lists.
---
 cons :: Monad m => Word8 -> ByteString m r -> ByteString m r
 cons c cs = Chunk (B.singleton c) cs
 {-# INLINE cons #-}
 
--- | /O(1)/ Unlike 'cons', 'cons\'' is
--- strict in the ByteString that we are consing onto. More precisely, it forces
--- the head and the first chunk. It does this because, for space efficiency, it
--- may coalesce the new byte onto the first \'chunk\' rather than starting a
--- new \'chunk\'.
+-- | /O(1)/ Unlike 'cons', 'cons\'' is strict in the ByteString that we are
+-- consing onto. More precisely, it forces the head and the first chunk. It does
+-- this because, for space efficiency, it may coalesce the new byte onto the
+-- first \'chunk\' rather than starting a new \'chunk\'.
 --
 -- So that means you can't use a lazy recursive contruction like this:
 --
@@ -535,13 +486,12 @@ cons c cs = Chunk (B.singleton c) cs
 --
 -- You can however use 'cons', as well as 'repeat' and 'cycle', to build
 -- infinite byte streams.
---
 cons' :: Word8 -> ByteString m r -> ByteString m r
 cons' w (Chunk c cs) | B.length c < 16 = Chunk (B.cons w c) cs
 cons' w cs           = Chunk (B.singleton w) cs
 {-# INLINE cons' #-}
--- --
--- | /O(n\/c)/ Append a byte to the end of a 'ByteString'
+
+-- | /O(n\/c)/ Append a byte to the end of a 'ByteString'.
 snoc :: Monad m => ByteString m r -> Word8 -> ByteString m r
 snoc cs w = do    -- cs <* singleton w
   r <- cs
@@ -558,7 +508,7 @@ head_ (Chunk c bs) = if B.null c
 head_ (Go m)      = m >>= head_
 {-# INLINABLE head_ #-}
 
--- | /O(c)/ Extract the first element of a 'ByteString', which must be non-empty.
+-- | /O(c)/ Extract the first element of a 'ByteString', if there is one.
 head :: Monad m => ByteString m r -> m (Of (Maybe Word8) r)
 head (Empty r)  = return (Nothing :> r)
 head (Chunk c rest) = case B.uncons c of
@@ -569,8 +519,8 @@ head (Chunk c rest) = case B.uncons c of
 head (Go m)      = m >>= head
 {-# INLINABLE head #-}
 
--- | /O(1)/ Extract the head and tail of a 'ByteString', or 'Nothing'
--- if it is empty
+-- | /O(1)/ Extract the head and tail of a 'ByteString', or 'Nothing' if it is
+-- empty.
 uncons :: Monad m => ByteString m r -> m (Maybe (Word8, ByteString m r))
 uncons (Empty _) = return Nothing
 uncons (Chunk c cs)
@@ -580,9 +530,9 @@ uncons (Chunk c cs)
                          else Chunk (B.unsafeTail c) cs )
 uncons (Go m) = m >>= uncons
 {-# INLINABLE uncons #-}
---
--- | /O(1)/ Extract the head and tail of a 'ByteString', or its return value
--- if it is empty. This is the \'natural\' uncons for an effectful byte stream.
+
+-- | /O(1)/ Extract the head and tail of a 'ByteString', or its return value if
+-- it is empty. This is the \'natural\' uncons for an effectful byte stream.
 nextByte :: Monad m => ByteString m r -> m (Either r (Word8, ByteString m r))
 nextByte (Empty r) = return (Left r)
 nextByte (Chunk c cs)
@@ -595,20 +545,22 @@ nextByte (Chunk c cs)
 nextByte (Go m) = m >>= nextByte
 {-# INLINABLE nextByte #-}
 
+-- | Like `uncons`, but yields the entire first `B.ByteString` chunk that the
+-- stream is holding onto. If there wasn't one, it tries to fetch it.
 unconsChunk :: Monad m => ByteString m r -> m (Maybe (B.ByteString, ByteString m r))
-unconsChunk = \bs -> case bs of
-  Empty _    -> return Nothing
-  Chunk c cs -> return (Just (c,cs))
-  Go m       ->  m >>= unconsChunk
+unconsChunk (Empty _)    = return Nothing
+unconsChunk (Chunk c cs) = return (Just (c,cs))
+unconsChunk (Go m)       = m >>= unconsChunk
 {-# INLINABLE unconsChunk #-}
 
+-- | Similar to `unconsChunk`, but yields the final @r@ return value when there
+-- is no subsequent chunk.
 nextChunk :: Monad m => ByteString m r -> m (Either r (B.ByteString, ByteString m r))
-nextChunk = \bs -> case bs of
-  Empty r    -> return (Left r)
-  Chunk c cs -> if B.null c
-    then nextChunk cs
-    else return (Right (c,cs))
-  Go m       -> m >>= nextChunk
+nextChunk (Empty r) = return (Left r)
+nextChunk (Go m) = m >>= nextChunk
+nextChunk (Chunk c cs)
+  | B.null c = nextChunk cs
+  | otherwise = return (Right (c,cs))
 {-# INLINABLE nextChunk #-}
 
 -- | /O(n\/c)/ Extract the last element of a 'ByteString', which must be finite
@@ -625,7 +577,7 @@ last_ (Chunk c0 cs0) = go c0 cs0
    go x (Go m)       = m >>= go x
 {-# INLINABLE last_ #-}
 
-
+-- | Like `last_`, but suitable as an argument for `Streaming.mapped`.
 last :: Monad m => ByteString m r -> m (Of (Maybe Word8) r)
 last (Empty r)      = return (Nothing :> r)
 last (Go m)         = m >>= last
@@ -660,11 +612,11 @@ last (Chunk c0 cs0) = go c0 cs0
 -- unsnoc Empty        = Nothing
 -- unsnoc (Chunk c cs) = Just (init (Chunk c cs), last (Chunk c cs))
 
--- | /O(n\/c)/ Append two
+-- | /O(n\/c)/ Append two `ByteString`s together.
 append :: Monad m => ByteString m r -> ByteString m s -> ByteString m s
 append xs ys = dematerialize xs (const ys) Chunk Go
 {-# INLINE append #-}
---
+
 -- ---------------------------------------------------------------------
 -- Transformations
 
@@ -672,16 +624,8 @@ append xs ys = dematerialize xs (const ys) Chunk Go
 -- element of @xs@.
 map :: Monad m => (Word8 -> Word8) -> ByteString m r -> ByteString m r
 map f z = dematerialize z Empty (Chunk . B.map f) Go
--- map f s = go s
---     where
---         go (Empty r)    = Empty r
---         go (Chunk x xs) = Chunk y ys
---             where
---                 y  = B.map f x
---                 ys = go xs
---         go (Go mbs) = Go (fmap go mbs)
 {-# INLINE map #-}
---
+
 -- -- | /O(n)/ 'reverse' @xs@ returns the elements of @xs@ in reverse order.
 -- reverse :: ByteString -> ByteString
 -- reverse cs0 = rev Empty cs0
@@ -690,8 +634,8 @@ map f z = dematerialize z Empty (Chunk . B.map f) Go
 -- {-# INLINE reverse #-}
 
 -- | The 'intersperse' function takes a 'Word8' and a 'ByteString' and
--- \`intersperses\' that byte between the elements of the 'ByteString'.
--- It is analogous to the intersperse function on Streams.
+-- \`intersperses\' that byte between the elements of the 'ByteString'. It is
+-- analogous to the intersperse function on Streams.
 intersperse :: Monad m => Word8 -> ByteString m r -> ByteString m r
 intersperse _ (Empty r)    = Empty r
 intersperse w (Go m)       = Go (fmap (intersperse w) m)
@@ -705,21 +649,20 @@ intersperse w (Chunk c cs) = Chunk (B.intersperse w c)
 
 {-# INLINABLE intersperse #-}
 
--- | 'foldr', applied to a binary operator, a starting value
--- (typically the right-identity of the operator), and a ByteString,
--- reduces the ByteString using the binary operator, from right to left.
+-- | 'foldr', applied to a binary operator, a starting value (typically the
+-- right-identity of the operator), and a ByteString, reduces the ByteString
+-- using the binary operator, from right to left.
 --
 -- > foldr cons = id
 --
 foldr :: Monad m => (Word8 -> a -> a) -> a -> ByteString m () -> m a
-foldr k  = foldrChunks (flip (B.foldr k))
+foldr k = foldrChunks (flip (B.foldr k))
 {-# INLINE foldr #-}
 
--- -- ---------------------------------------------------------------------
--- | 'fold', applied to a binary operator, a starting value (typically
--- the left-identity of the operator), and a ByteString, reduces the
--- ByteString using the binary operator, from left to right.
--- We use the style of the foldl libarary for left folds
+-- | 'fold', applied to a binary operator, a starting value (typically the
+-- left-identity of the operator), and a ByteString, reduces the ByteString
+-- using the binary operator, from left to right. We use the style of the foldl
+-- libarary for left folds
 fold :: Monad m => (x -> Word8 -> x) -> x -> (x -> b) -> ByteString m () -> m b
 fold step0 begin finish p0 = loop p0 begin
   where
@@ -729,10 +672,8 @@ fold step0 begin finish p0 = loop p0 begin
         Empty _      -> return (finish x)
 {-# INLINABLE fold #-}
 
-
 -- | 'fold_' keeps the return value of the left-folded bytestring. Useful for
---   simultaneous folds over a segmented bytestream
-
+-- simultaneous folds over a segmented bytestream
 fold_ :: Monad m => (x -> Word8 -> x) -> x -> (x -> b) -> ByteString m r -> m (Of b r)
 fold_ step0 begin finish p0 = loop p0 begin
   where
@@ -742,28 +683,6 @@ fold_ step0 begin finish p0 = loop p0 begin
         Empty r      -> return (finish x :> r)
 {-# INLINABLE fold_ #-}
 
---
-
--- --
--- -- | 'foldl1' is a variant of 'foldl' that has no starting value
--- -- argument, and thus must be applied to non-empty 'ByteStrings'.
--- foldl1 :: (Word8 -> Word8 -> Word8) -> ByteString -> Word8
--- foldl1 _ Empty        = errorEmptyStream "foldl1"
--- foldl1 f (Chunk c cs) = foldl f (B.unsafeHead c) (Chunk (B.unsafeTail c) cs)
---
--- -- | 'foldl1\'' is like 'foldl1', but strict in the accumulator.
--- foldl1' :: (Word8 -> Word8 -> Word8) -> ByteString -> Word8
--- foldl1' _ Empty        = errorEmptyStream "foldl1'"
--- foldl1' f (Chunk c cs) = foldl' f (B.unsafeHead c) (Chunk (B.unsafeTail c) cs)
---
--- -- | 'foldr1' is a variant of 'foldr' that has no starting value argument,
--- -- and thus must be applied to non-empty 'ByteString's
--- foldr1 :: (Word8 -> Word8 -> Word8) -> ByteString -> Word8
--- foldr1 _ Empty          = errorEmptyStream "foldr1"
--- foldr1 f (Chunk c0 cs0) = go c0 cs0
---   where go c Empty         = B.foldr1 f c
---         go c (Chunk c' cs) = B.foldr  f (go c' cs) c
---
 -- ---------------------------------------------------------------------
 -- Special folds
 
@@ -777,91 +696,6 @@ fold_ step0 begin finish p0 = loop p0 begin
 --     to []               = Empty ()
 --     to (cs:css)         = go css cs
 
-
--- -- | Map a function over a 'ByteString' and concatenate the results
--- concatMap :: (Word8 -> ByteString) -> ByteString -> ByteString
--- concatMap _ Empty        = Empty
--- concatMap f (Chunk c0 cs0) = to c0 cs0
---   where
---     go :: ByteString -> P.ByteString -> ByteString -> ByteString
---     go Empty        c' cs' = to c' cs'
---     go (Chunk c cs) c' cs' = Chunk c (go cs c' cs')
---
---     to :: P.ByteString -> ByteString -> ByteString
---     to c cs | B.null c  = case cs of
---         Empty          -> Empty
---         (Chunk c' cs') -> to c' cs'
---             | otherwise = go (f (B.unsafeHead c)) (B.unsafeTail c) cs
---
--- -- | /O(n)/ Applied to a predicate and a ByteString, 'any' determines if
--- -- any element of the 'ByteString' satisfies the predicate.
--- any :: (Word8 -> Bool) -> ByteString -> Bool
--- any f cs = foldrChunks (\c rest -> B.any f c || rest) False cs
--- {-# INLINE any #-}
--- -- todo fuse
---
--- -- | /O(n)/ Applied to a predicate and a 'ByteString', 'all' determines
--- -- if all elements of the 'ByteString' satisfy the predicate.
--- all :: (Word8 -> Bool) -> ByteString -> Bool
--- all f cs = foldrChunks (\c rest -> B.all f c && rest) True cs
--- {-# INLINE all #-}
--- -- todo fuse
---
--- -- | /O(n)/ 'maximum' returns the maximum value from a 'ByteString'
--- maximum :: ByteString -> Word8
--- maximum Empty        = errorEmptyStream "maximum"
--- maximum (Chunk c cs) = foldlChunks (\n c' -> n `max` B.maximum c')
---                                    (B.maximum c) cs
--- {-# INLINE maximum #-}
---
--- -- | /O(n)/ 'minimum' returns the minimum value from a 'ByteString'
--- minimum :: ByteString -> Word8
--- minimum Empty        = errorEmptyStream "minimum"
--- minimum (Chunk c cs) = foldlChunks (\n c' -> n `min` B.minimum c')
---                                      (B.minimum c) cs
--- {-# INLINE minimum #-}
---
--- -- | The 'mapAccumL' function behaves like a combination of 'map' and
--- -- 'foldl'; it applies a function to each element of a ByteString,
--- -- passing an accumulating parameter from left to right, and returning a
--- -- final value of this accumulator together with the new ByteString.
--- mapAccumL :: (acc -> Word8 -> (acc, Word8)) -> acc -> ByteString -> (acc, ByteString)
--- mapAccumL f s0 cs0 = go s0 cs0
---   where
---     go s Empty        = (s, Empty)
---     go s (Chunk c cs) = (s'', Chunk c' cs')
---         where (s',  c')  = B.mapAccumL f s c
---               (s'', cs') = go s' cs
---
--- -- | The 'mapAccumR' function behaves like a combination of 'map' and
--- -- 'foldr'; it applies a function to each element of a ByteString,
--- -- passing an accumulating parameter from right to left, and returning a
--- -- final value of this accumulator together with the new ByteString.
--- mapAccumR :: (acc -> Word8 -> (acc, Word8)) -> acc -> ByteString -> (acc, ByteString)
--- mapAccumR f s0 cs0 = go s0 cs0
---   where
---     go s Empty        = (s, Empty)
---     go s (Chunk c cs) = (s'', Chunk c' cs')
---         where (s'', c') = B.mapAccumR f s' c
---               (s', cs') = go s cs
---
--- -- ---------------------------------------------------------------------
--- -- Building ByteStrings
---
--- -- | 'scanl' is similar to 'foldl', but returns a list of successive
--- -- reduced values from the left. This function will fuse.
--- --
--- -- > scanl f z [x1, x2, ...] == [z, z `f` x1, (z `f` x1) `f` x2, ...]
--- --
--- -- Note that
--- --
--- -- > last (scanl f z xs) == foldl f z xs.
--- scanl :: (Word8 -> Word8 -> Word8) -> Word8 -> ByteString -> ByteString
--- scanl f z = snd . foldl k (z,singleton z)
---  where
---     k (c,acc) a = let n = f c a in (n, acc `snoc` n)
--- {-# INLINE scanl #-}
---
 -- ---------------------------------------------------------------------
 -- Unfolds and replicates
 
@@ -874,7 +708,6 @@ fold_ step0 begin finish p0 = loop p0 begin
 ()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXY
 >>> Q.putStrLn $ Q.take 50 $ Q.iterate succ '\''
 ()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXY
-
 -}
 iterate :: (Word8 -> Word8) -> Word8 -> ByteString m r
 iterate f = unfoldr (\x -> case f x of !x' -> Right (x', x'))
@@ -892,22 +725,6 @@ repeat :: Word8 -> ByteString m r
 repeat w = cs where cs = Chunk (B.replicate BI.smallChunkSize w) cs
 {-# INLINABLE repeat #-}
 
--- -- | /O(n)/ @'replicate' n x@ is a ByteString of length @n@ with @x@
--- -- the value of every element.
--- --
--- replicate :: Int64 -> Word8 -> ByteString
--- replicate n w
---     | n <= 0             = Empty
---     | n < fromIntegral smallChunkSize = Chunk (B.replicate (fromIntegral n) w) Empty
---     | r == 0             = cs -- preserve invariant
---     | otherwise          = Chunk (B.unsafeTake (fromIntegral r) c) cs
---  where
---     c      = B.replicate smallChunkSize w
---     cs     = nChunks q
---     (q, r) = quotRem n (fromIntegral smallChunkSize)
---     nChunks 0 = Empty
---     nChunks m = Chunk c (nChunks (m-1))
-
 {- | 'cycle' ties a finite ByteString into a circular one, or equivalently,
      the infinite repetition of the original ByteString. For an empty bytestring
      (like @return 17@) it of course makes an unproductive loop
@@ -923,12 +740,10 @@ cycle = forever
 {-# INLINE cycle #-}
 
 -- | /O(n)/ The 'unfoldr' function is analogous to the Stream @unfoldr@.
--- 'unfoldr' builds a ByteString from a seed value.  The function takes
--- the element and returns 'Nothing' if it is done producing the
--- ByteString or returns @'Just' (a,b)@, in which case, @a@ is a
--- prepending to the ByteString and @b@ is used as the next element in a
--- recursive call.
-
+-- 'unfoldr' builds a ByteString from a seed value. The function takes the
+-- element and returns 'Nothing' if it is done producing the ByteString or
+-- returns @'Just' (a,b)@, in which case, @a@ is a prepending to the ByteString
+-- and @b@ is used as the next element in a recursive call.
 unfoldM :: Monad m => (a -> Maybe (Word8, a)) -> a -> ByteString m ()
 unfoldM f s0 = unfoldChunk 32 s0
   where unfoldChunk n s =
@@ -939,9 +754,8 @@ unfoldM f s0 = unfoldChunk 32 s0
             (c, Just s')  -> Chunk c (unfoldChunk (n*2) s')
 {-# INLINABLE unfoldM #-}
 
--- | 'unfold' is like 'unfoldr' but stops when the co-algebra
--- returns 'Left'; the result is the return value of the @ByteString m r@
--- @unfoldr uncons = id@
+-- | 'unfold' is like 'unfoldr' but stops when the co-algebra returns 'Left';
+-- the result is the return value of the @ByteString m r@ @unfoldr uncons = id@
 unfoldr :: (a -> Either r (Word8, a)) -> a -> ByteString m r
 unfoldr f s0 = unfoldChunk 32 s0
   where unfoldChunk n s =
@@ -970,7 +784,6 @@ True
 Is there
 >>> Q.effects  rest
 True
-
 -}
 take :: Monad m => Int64 -> ByteString m r -> ByteString m ()
 take i _ | i <= 0 = Empty ()
@@ -1005,14 +818,12 @@ drop i cs0 = drop' i cs0
         drop' n (Go m) = Go (fmap (drop' n) m)
 {-# INLINABLE drop #-}
 
-
 {-| /O(n\/c)/ 'splitAt' @n xs@ is equivalent to @('take' n xs, 'drop' n xs)@.
 
 >>> rest <- Q.putStrLn $ Q.splitAt 3 "therapist is a danger to good hyphenation, as Knuth notes"
 the
 >>> Q.putStrLn $ Q.splitAt 19 rest
 rapist is a danger
-
 -}
 splitAt :: Monad m => Int64 -> ByteString m r -> ByteString m (ByteString m r)
 splitAt i cs0 | i <= 0 = Empty cs0
@@ -1027,9 +838,8 @@ splitAt i cs0 = splitAt' i cs0
         splitAt' n (Go m) = Go  (fmap (splitAt' n) m)
 {-# INLINABLE splitAt #-}
 
--- | 'takeWhile', applied to a predicate @p@ and a ByteString @xs@,
--- returns the longest prefix (possibly empty) of @xs@ of elements that
--- satisfy @p@.
+-- | 'takeWhile', applied to a predicate @p@ and a ByteString @xs@, returns the
+-- longest prefix (possibly empty) of @xs@ of elements that satisfy @p@.
 takeWhile :: Monad m => (Word8 -> Bool) -> ByteString m r -> ByteString m ()
 takeWhile f cs0 = takeWhile' cs0
   where
@@ -1067,60 +877,19 @@ break f cs0 = break' cs0
         break' (Go m) = Go (fmap break' m)
 {-# INLINABLE break #-}
 
---
--- -- TODO
--- --
--- -- Add rules
--- --
---
--- {-
--- -- | 'breakByte' breaks its ByteString argument at the first occurence
--- -- of the specified byte. It is more efficient than 'break' as it is
--- -- implemented with @memchr(3)@. I.e.
--- --
--- -- > break (=='c') "abcd" == breakByte 'c' "abcd"
--- --
--- breakByte :: Word8 -> ByteString -> (ByteString, ByteString)
--- breakByte c (LPS ps) = case (breakByte' ps) of (a,b) -> (LPS a, LPS b)
---   where breakByte' []     = ([], [])
---         breakByte' (x:xs) =
---           case P.elemIndex c x of
---             Just 0  -> ([], x : xs)
---             Just n  -> (P.take n x : [], P.drop n x : xs)
---             Nothing -> let (xs', xs'') = breakByte' xs
---                         in (x : xs', xs'')
---
--- -- | 'spanByte' breaks its ByteString argument at the first
--- -- occurence of a byte other than its argument. It is more efficient
--- -- than 'span (==)'
--- --
--- -- > span  (=='c') "abcd" == spanByte 'c' "abcd"
--- --
--- spanByte :: Word8 -> ByteString -> (ByteString, ByteString)
--- spanByte c (LPS ps) = case (spanByte' ps) of (a,b) -> (LPS a, LPS b)
---   where spanByte' []     = ([], [])
---         spanByte' (x:xs) =
---           case P.spanByte c x of
---             (x', x'') | P.null x'  -> ([], x : xs)
---                       | P.null x'' -> let (xs', xs'') = spanByte' xs
---                                        in (x : xs', xs'')
---                       | otherwise  -> (x' : [], x'' : xs)
--- -}
---
--- | 'span' @p xs@ breaks the ByteString into two segments. It is
--- equivalent to @('takeWhile' p xs, 'dropWhile' p xs)@
+-- | 'span' @p xs@ breaks the ByteString into two segments. It is equivalent to
+-- @('takeWhile' p xs, 'dropWhile' p xs)@.
 span :: Monad m => (Word8 -> Bool) -> ByteString m r -> ByteString m (ByteString m r)
 span p = break (not . p)
 {-# INLINE span #-}
 
--- | /O(n)/ Splits a 'ByteString' into components delimited by
--- separators, where the predicate returns True for a separator element.
--- The resulting components do not contain the separators.  Two adjacent
--- separators result in an empty component in the output.  eg.
+-- | /O(n)/ Splits a 'ByteString' into components delimited by separators, where
+-- the predicate returns True for a separator element. The resulting components
+-- do not contain the separators. Two adjacent separators result in an empty
+-- component in the output. eg.
 --
 -- > splitWith (=='a') "aabbaca" == ["","","bb","c",""]
 -- > splitWith (=='a') []        == []
---
 splitWith :: Monad m => (Word8 -> Bool) -> ByteString m r -> Stream (ByteString m) m r
 splitWith _ (Empty r)      = Return r
 splitWith p (Go m)         = Effect $ fmap (splitWith p) m
@@ -1159,7 +928,6 @@ splitWith p (Chunk c0 cs0) = comb [] (B.splitWith p c0) cs0
 -- As for all splitting functions in this library, this function does
 -- not copy the substrings, it just constructs new 'ByteStrings' that
 -- are slices of the original.
---
 split :: Monad m => Word8 -> ByteString m r -> Stream (ByteString m) m r
 split w = loop
   where
@@ -1175,17 +943,14 @@ split w = loop
   comb acc (s:ss) cs        = Step $ revChunks (s:acc) (comb [] ss cs)
 {-# INLINABLE split #-}
 
-
---
--- | The 'group' function takes a ByteString and returns a list of
--- ByteStrings such that the concatenation of the result is equal to the
--- argument.  Moreover, each sublist in the result contains only equal
--- elements.  For example,
+-- | The 'group' function takes a ByteString and returns a list of ByteStrings
+-- such that the concatenation of the result is equal to the argument. Moreover,
+-- each sublist in the result contains only equal elements. For example,
 --
 -- > group "Mississippi" = ["M","i","ss","i","ss","i","pp","i"]
 --
--- It is a special case of 'groupBy', which allows the programmer to
--- supply their own equality test.
+-- It is a special case of 'groupBy', which allows the programmer to supply
+-- their own equality test.
 group :: Monad m => ByteString m r -> Stream (ByteString m) m r
 group = go
   where
@@ -1223,25 +988,6 @@ groupBy rel = go
         | otherwise       -> revNonEmptyChunks (B.unsafeTake n c : acc) (Empty (go (Chunk (B.unsafeDrop n c) cs)))
 {-# INLINABLE groupBy #-}
 
--- -- | The 'groupBy' function is the non-overloaded version of 'group'.
--- --
--- groupBy :: (Word8 -> Word8 -> Bool) -> ByteString -> [ByteString]
--- groupBy k = go
---   where
---     go Empty        = []
---     go (Chunk c cs)
---       | B.length c == 1  = to [c] (B.unsafeHead c) cs
---       | otherwise        = to [B.unsafeTake 1 c] (B.unsafeHead c) (Chunk (B.unsafeTail c) cs)
---
---     to acc !_ Empty        = revNonEmptyChunks acc : []
---     to acc !w (Chunk c cs) =
---       case findIndexOrEnd (not . k w) c of
---         0                    -> revNonEmptyChunks acc
---                               : go (Chunk c cs)
---         n | n == B.length c  -> to (B.unsafeTake n c : acc) w cs
---           | otherwise        -> revNonEmptyChunks (B.unsafeTake n c : acc)
---                               : go (Chunk (B.unsafeDrop n c) cs)
---
 -- | /O(n)/ The 'intercalate' function takes a 'ByteString' and a list of
 -- 'ByteString's and concatenates the list after interspersing the first
 -- argument between each element of the list.
@@ -1262,60 +1008,23 @@ intercalate s (Step bs0) = do  -- this isn't quite right
  --      x -> s >> loop x
 {-# INLINABLE intercalate #-}
 
-
--- | count returns the number of times its argument appears in the ByteString
+-- | Returns the number of times its argument appears in the `ByteString`.
 --
 -- > count = length . elemIndices
---
 count_ :: Monad m => Word8 -> ByteString m r -> m Int
 count_ w  = fmap (\(n :> _) -> n) . foldlChunks (\n c -> n + fromIntegral (B.count w c)) 0
 {-# INLINE count_ #-}
 
--- But more efficiently than using length on the intermediate list.
+-- | Like `count_`, but suitable for use with `Streaming.mapped`.
 count :: Monad m => Word8 -> ByteString m r -> m (Of Int r)
 count w cs = foldlChunks (\n c -> n + fromIntegral (B.count w c)) 0 cs
 {-# INLINE count #-}
 
--- -- | The 'findIndex' function takes a predicate and a 'ByteString' and
--- -- returns the index of the first element in the ByteString
--- -- satisfying the predicate.
--- findIndex :: (Word8 -> Bool) -> ByteString -> Maybe Int64
--- findIndex k cs0 = findIndex' 0 cs0
---   where findIndex' _ Empty        = Nothing
---         findIndex' n (Chunk c cs) =
---           case B.findIndex k c of
---             Nothing -> findIndex' (n + fromIntegral (B.length c)) cs
---             Just i  -> Just (n + fromIntegral i)
--- {-# INLINE findIndex #-}
---
--- -- | /O(n)/ The 'find' function takes a predicate and a ByteString,
--- -- and returns the first element in matching the predicate, or 'Nothing'
--- -- if there is no such element.
--- --
--- -- > find f p = case findIndex f p of Just n -> Just (p ! n) ; _ -> Nothing
--- --
--- find :: (Word8 -> Bool) -> ByteString -> Maybe Word8
--- find f cs0 = find' cs0
---   where find' Empty        = Nothing
---         find' (Chunk c cs) = case B.find f c of
---             Nothing -> find' cs
---             Just w  -> Just w
--- {-# INLINE find #-}
---
--- -- | The 'findIndices' function extends 'findIndex', by returning the
--- -- indices of all elements satisfying the predicate, in ascending order.
--- findIndices :: (Word8 -> Bool) -> ByteString -> [Int64]
--- findIndices k cs0 = findIndices' 0 cs0
---   where findIndices' _ Empty        = []
---         findIndices' n (Chunk c cs) = L.map ((+n).fromIntegral) (B.findIndices k c)
---                              ++ findIndices' (n + fromIntegral (B.length c)) cs
---
 -- ---------------------------------------------------------------------
 -- Searching ByteStrings
 
--- | /O(n)/ 'filter', applied to a predicate and a ByteString,
--- returns a ByteString containing those characters that satisfy the
--- predicate.
+-- | /O(n)/ 'filter', applied to a predicate and a ByteString, returns a
+-- ByteString containing those characters that satisfy the predicate.
 filter :: Monad m => (Word8 -> Bool) -> ByteString m r -> ByteString m r
 filter p s = go s
     where
@@ -1325,78 +1034,6 @@ filter p s = go s
                             -- should inspect for null
 {-# INLINABLE filter #-}
 
--- {-
--- -- | /O(n)/ and /O(n\/c) space/ A first order equivalent of /filter .
--- -- (==)/, for the common case of filtering a single byte. It is more
--- -- efficient to use /filterByte/ in this case.
--- --
--- -- > filterByte == filter . (==)
--- --
--- -- filterByte is around 10x faster, and uses much less space, than its
--- -- filter equivalent
--- filterByte :: Word8 -> ByteString -> ByteString
--- filterByte w ps = replicate (count w ps) w
--- {-# INLINE filterByte #-}
---
--- {-# RULES
--- "ByteString specialise filter (== x)" forall x.
---   filter ((==) x) = filterByte x
---
--- "ByteString specialise filter (== x)" forall x.
---  filter (== x) = filterByte x
---   #-}
--- -}
---
--- {-
--- -- | /O(n)/ A first order equivalent of /filter . (\/=)/, for the common
--- -- case of filtering a single byte out of a list. It is more efficient
--- -- to use /filterNotByte/ in this case.
--- --
--- -- > filterNotByte == filter . (/=)
--- --
--- -- filterNotByte is around 2x faster than its filter equivalent.
--- filterNotByte :: Word8 -> ByteString -> ByteString
--- filterNotByte w (LPS xs) = LPS (filterMap (P.filterNotByte w) xs)
--- -}
-
-
--- -- ---------------------------------------------------------------------
--- -- Zipping
---
--- -- | /O(n)/ 'zip' takes two ByteStrings and returns a list of
--- -- corresponding pairs of bytes. If one input ByteString is short,
--- -- excess elements of the longer ByteString are discarded. This is
--- -- equivalent to a pair of 'unpack' operations.
--- zip :: ByteString -> ByteString -> [(Word8,Word8)]
--- zip = zipWith (,)
---
--- -- | 'zipWith' generalises 'zip' by zipping with the function given as
--- -- the first argument, instead of a tupling function.  For example,
--- -- @'zipWith' (+)@ is applied to two ByteStrings to produce the list of
--- -- corresponding sums.
--- zipWith :: (Word8 -> Word8 -> a) -> ByteString -> ByteString -> [a]
--- zipWith _ Empty     _  = []
--- zipWith _ _      Empty = []
--- zipWith f (Chunk a as) (Chunk b bs) = go a as b bs
---   where
---     go x xs y ys = f (B.unsafeHead x) (B.unsafeHead y)
---                  : to (B.unsafeTail x) xs (B.unsafeTail y) ys
---
---     to x Empty         _ _             | B.null x       = []
---     to _ _             y Empty         | B.null y       = []
---     to x xs            y ys            | not (B.null x)
---                                       && not (B.null y) = go x  xs y  ys
---     to x xs            _ (Chunk y' ys) | not (B.null x) = go x  xs y' ys
---     to _ (Chunk x' xs) y ys            | not (B.null y) = go x' xs y  ys
---     to _ (Chunk x' xs) _ (Chunk y' ys)                  = go x' xs y' ys
---
--- -- | /O(n)/ 'unzip' transforms a list of pairs of bytes into a pair of
--- -- ByteStrings. Note that this performs two 'pack' operations.
--- unzip :: [(Word8,Word8)] -> (ByteString,ByteString)
--- unzip ls = (pack (L.map fst ls), pack (L.map snd ls))
--- {-# INLINE unzip #-}
---
-
 -- ---------------------------------------------------------------------
 -- ByteString IO
 --
@@ -1404,19 +1041,16 @@ filter p s = go s
 -- If so, close when done.
 --
 
-{- | Read entire handle contents /lazily/ into a 'ByteString'. Chunks
-    are read on demand, in at most @k@-sized chunks. It does not block
-    waiting for a whole @k@-sized chunk, so if less than @k@ bytes are
-    available then they will be returned immediately as a smaller chunk.
-
-    Note: the 'Handle' should be placed in binary mode with
-    'System.IO.hSetBinaryMode' for 'hGetContentsN' to
-    work correctly.
--}
+-- | Read entire handle contents /lazily/ into a 'ByteString'. Chunks are read
+-- on demand, in at most @k@-sized chunks. It does not block waiting for a whole
+-- @k@-sized chunk, so if less than @k@ bytes are available then they will be
+-- returned immediately as a smaller chunk.
+--
+-- Note: the 'Handle' should be placed in binary mode with
+-- 'System.IO.hSetBinaryMode' for 'hGetContentsN' to work correctly.
 hGetContentsN :: MonadIO m => Int -> Handle -> ByteString m ()
 hGetContentsN k h = loop -- TODO close on exceptions
   where
---    lazyRead = unsafeInterleaveIO loop
     loop = do
         c <- liftIO (B.hGetSome h k)
         -- only blocks if there is no data available
@@ -1425,9 +1059,8 @@ hGetContentsN k h = loop -- TODO close on exceptions
           else Chunk c loop
 {-# INLINABLE hGetContentsN #-} -- very effective inline pragma
 
--- | Read @n@ bytes into a 'ByteString', directly from the
--- specified 'Handle', in chunks of size @k@.
---
+-- | Read @n@ bytes into a 'ByteString', directly from the specified 'Handle',
+-- in chunks of size @k@.
 hGetN :: MonadIO m => Int -> Handle -> Int -> ByteString m ()
 hGetN k h n | n > 0 = readChunks n
   where
@@ -1436,15 +1069,13 @@ hGetN k h n | n > 0 = readChunks n
         case B.length c of
             0 -> return $ Empty ()
             m -> return $ Chunk c (readChunks (i - m))
-
 hGetN _ _ 0 = Empty ()
 hGetN _ h n = liftIO $ illegalBufferSize h "hGet" n  -- <--- REPAIR !!!
 {-# INLINABLE hGetN #-}
 
--- | hGetNonBlockingN is similar to 'hGetContentsN', except that it will never block
--- waiting for data to become available, instead it returns only whatever data
--- is available. Chunks are read on demand, in @k@-sized chunks.
-
+-- | hGetNonBlockingN is similar to 'hGetContentsN', except that it will never
+-- block waiting for data to become available, instead it returns only whatever
+-- data is available. Chunks are read on demand, in @k@-sized chunks.
 hGetNonBlockingN :: MonadIO m => Int -> Handle -> Int ->  ByteString m ()
 hGetNonBlockingN k h n | n > 0 = readChunks n
   where
@@ -1457,7 +1088,6 @@ hGetNonBlockingN _ _ 0 = Empty ()
 hGetNonBlockingN _ h n = liftIO $ illegalBufferSize h "hGetNonBlocking" n
 {-# INLINABLE hGetNonBlockingN #-}
 
-
 illegalBufferSize :: Handle -> String -> Int -> IO a
 illegalBufferSize handle fn sz =
     ioError (mkIOError illegalOperationErrorType msg (Just handle) Nothing)
@@ -1466,59 +1096,54 @@ illegalBufferSize handle fn sz =
       msg = fn ++ ": illegal ByteString size " ++ showsPrec 9 sz []
 {-# INLINABLE illegalBufferSize #-}
 
-{-| Read entire handle contents /lazily/ into a 'ByteString'. Chunks
-    are read on demand, using the default chunk size.
-
-    Note: the 'Handle' should be placed in binary mode with
-    'System.IO.hSetBinaryMode' for 'hGetContents' to
-    work correctly.
--}
+-- | Read entire handle contents /lazily/ into a 'ByteString'. Chunks are read
+-- on demand, using the default chunk size.
+--
+-- Note: the 'Handle' should be placed in binary mode with
+-- 'System.IO.hSetBinaryMode' for 'hGetContents' to work correctly.
 hGetContents :: MonadIO m => Handle -> ByteString m ()
 hGetContents = hGetContentsN defaultChunkSize
 {-# INLINE hGetContents #-}
 
--- | Pipes-style nomenclature for 'hGetContents'
+-- | Pipes-style nomenclature for 'hGetContents'.
 fromHandle :: MonadIO m => Handle -> ByteString m ()
 fromHandle = hGetContents
 {-# INLINE fromHandle #-}
 
--- | Pipes-style nomenclature for 'getContents'
+-- | Pipes-style nomenclature for 'getContents'.
 stdin :: MonadIO m => ByteString m ()
 stdin = hGetContents IO.stdin
 {-# INLINE stdin #-}
 
 -- | Read @n@ bytes into a 'ByteString', directly from the specified 'Handle'.
---
 hGet :: MonadIO m => Handle -> Int -> ByteString m ()
 hGet = hGetN defaultChunkSize
 {-# INLINE hGet #-}
 
 -- | hGetNonBlocking is similar to 'hGet', except that it will never block
 -- waiting for data to become available, instead it returns only whatever data
--- is available.  If there is no data available to be read, 'hGetNonBlocking'
+-- is available. If there is no data available to be read, 'hGetNonBlocking'
 -- returns 'empty'.
 --
 -- Note: on Windows and with Haskell implementation other than GHC, this
 -- function does not work correctly; it behaves identically to 'hGet'.
---
 hGetNonBlocking :: MonadIO m => Handle -> Int -> ByteString m ()
 hGetNonBlocking = hGetNonBlockingN defaultChunkSize
 {-# INLINE hGetNonBlocking #-}
 
-{-| Write a 'ByteString' to a file. Use 'Control.Monad.Trans.ResourceT.runResourceT'
-    to ensure that the handle is closed.
-
->>> :set -XOverloadedStrings
->>> runResourceT $ Q.writeFile "hello.txt" "Hello world.\nGoodbye world.\n"
->>> :! cat "hello.txt"
-Hello world.
-Goodbye world.
->>> runResourceT $ Q.writeFile "hello2.txt" $ Q.readFile "hello.txt"
->>> :! cat hello2.txt
-Hello world.
-Goodbye world.
-
- -}
+-- | Write a 'ByteString' to a file. Use
+-- 'Control.Monad.Trans.ResourceT.runResourceT' to ensure that the handle is
+-- closed.
+--
+-- >>> :set -XOverloadedStrings
+-- >>> runResourceT $ Q.writeFile "hello.txt" "Hello world.\nGoodbye world.\n"
+-- >>> :! cat "hello.txt"
+-- Hello world.
+-- Goodbye world.
+-- >>> runResourceT $ Q.writeFile "hello2.txt" $ Q.readFile "hello.txt"
+-- >>> :! cat hello2.txt
+-- Hello world.
+-- Goodbye world.
 writeFile :: MonadResource m => FilePath -> ByteString m r -> m r
 writeFile f str = do
   (key, handle) <- allocate (openBinaryFile f WriteMode) hClose
@@ -1527,39 +1152,35 @@ writeFile f str = do
   return r
 {-# INLINE writeFile #-}
 
-{-| Read an entire file into a chunked @'ByteString' IO ()@.
-    The handle will be held open until EOF is encountered.
-    The block governed by 'Control.Monad.Trans.Resource.runResourceT'
-    will end with the closing of any handles opened.
-
->>> :! cat hello.txt
-Hello world.
-Goodbye world.
->>> runResourceT $ Q.stdout $ Q.readFile "hello.txt"
-Hello world.
-Goodbye world.
-  -}
-
+-- | Read an entire file into a chunked @'ByteString' IO ()@. The handle will be
+-- held open until EOF is encountered. The block governed by
+-- 'Control.Monad.Trans.Resource.runResourceT' will end with the closing of any
+-- handles opened.
+--
+-- >>> :! cat hello.txt
+-- Hello world.
+-- Goodbye world.
+-- >>> runResourceT $ Q.stdout $ Q.readFile "hello.txt"
+-- Hello world.
+-- Goodbye world.
 readFile :: MonadResource m => FilePath -> ByteString m ()
 readFile f = bracketByteString (openBinaryFile f ReadMode) hClose hGetContents
 {-# INLINE readFile #-}
 
-
-
-{-| Append a 'ByteString' to a file. Use 'Control.Monad.Trans.ResourceT.runResourceT'
-    to ensure that the handle is closed.
-
->>> runResourceT $ Q.writeFile "hello.txt" "Hello world.\nGoodbye world.\n"
->>> runResourceT $ Q.stdout $ Q.readFile "hello.txt"
-Hello world.
-Goodbye world.
->>> runResourceT $ Q.appendFile "hello.txt" "sincerely yours,\nArthur\n"
->>> runResourceT $ Q.stdout $  Q.readFile "hello.txt"
-Hello world.
-Goodbye world.
-sincerely yours,
-Arthur
-  -}
+-- | Append a 'ByteString' to a file. Use
+-- 'Control.Monad.Trans.ResourceT.runResourceT' to ensure that the handle is
+-- closed.
+--
+-- >>> runResourceT $ Q.writeFile "hello.txt" "Hello world.\nGoodbye world.\n"
+-- >>> runResourceT $ Q.stdout $ Q.readFile "hello.txt"
+-- Hello world.
+-- Goodbye world.
+-- >>> runResourceT $ Q.appendFile "hello.txt" "sincerely yours,\nArthur\n"
+-- >>> runResourceT $ Q.stdout $  Q.readFile "hello.txt"
+-- Hello world.
+-- Goodbye world.
+-- sincerely yours,
+-- Arthur
 appendFile :: MonadResource m => FilePath -> ByteString m r -> m r
 appendFile f str = do
   (key, handle) <- allocate (openBinaryFile f AppendMode) hClose
@@ -1568,24 +1189,22 @@ appendFile f str = do
   return r
 {-# INLINE appendFile #-}
 
--- | getContents. Equivalent to hGetContents stdin. Will read /lazily/
---
+-- | Equivalent to @hGetContents stdin@. Will read /lazily/.
 getContents :: MonadIO m => ByteString m ()
 getContents = hGetContents IO.stdin
 {-# INLINE getContents #-}
 
 -- | Outputs a 'ByteString' to the specified 'Handle'.
---
 hPut ::  MonadIO m => Handle -> ByteString m r -> m r
 hPut h cs = dematerialize cs return (\x y -> liftIO (B.hPut h x) >> y) (>>= id)
 {-# INLINE hPut #-}
 
--- | Pipes nomenclature for 'hPut'
+-- | Pipes nomenclature for 'hPut'.
 toHandle :: MonadIO m => Handle -> ByteString m r -> m r
 toHandle = hPut
 {-# INLINE toHandle #-}
 
--- | Pipes-style nomenclature for 'putStr'
+-- | Pipes-style nomenclature for 'putStr'.
 stdout ::  MonadIO m => ByteString m r -> m r
 stdout = hPut IO.stdout
 {-# INLINE stdout #-}
@@ -1618,50 +1237,25 @@ stdout = hPut IO.stdout
 -- putStr :: ByteString IO r -> IO r
 -- putStr = hPut IO.stdout
 
--- -- | Write a ByteString to stdout, appending a newline byte
--- --
--- putStrLn :: ByteString -> IO ()
--- putStrLn ps = hPut stdout ps >> hPut stdout (singleton 0x0a)
+-- | The interact function takes a function of type @ByteString -> ByteString@
+-- as its argument. The entire input from the standard input device is passed to
+-- this function as its argument, and the resulting string is output on the
+-- standard output device.
 --
-
-
-{- | The interact function takes a function of type @ByteString -> ByteString@
-   as its argument. The entire input from the standard input device is passed
-   to this function as its argument, and the resulting string is output on the
-   standard output device.
-
-> interact morph = stdout (morph stdin)
--}
+-- > interact morph = stdout (morph stdin)
 interact :: (ByteString IO () -> ByteString IO r) -> IO r
 interact f = stdout (f stdin)
 {-# INLINE interact #-}
 
 -- -- ---------------------------------------------------------------------
 -- -- Internal utilities
---
--- -- Common up near identical calls to `error' to reduce the number
--- -- constant strings created when compiled:
--- errorEmptyStream :: String -> a
--- errorEmptyStream fun = moduleError fun "empty ByteString"
--- {-# NOINLINE errorEmptyStream #-}
---
--- moduleError :: String -> String -> a
--- moduleError fun msg = error ("Data.ByteString.Lazy." ++ fun ++ ':':' ':msg)
--- {-# NOINLINE moduleError #-}
 
+-- | Used in `group` and `groupBy`.
 revNonEmptyChunks :: [P.ByteString] -> ByteString m r -> ByteString m r
 revNonEmptyChunks = L.foldl' (\f bs -> Chunk bs . f) id
 {-# INLINE revNonEmptyChunks #-}
-  -- loop p xs
-  -- where
-  --   loop !bss [] = bss
-  --   loop bss (b:bs) = loop (Chunk b bss) bs
-  --   loop' [] = id
-  --   loop' (b:bs) = loop' bs . Chunk b
--- L.foldl' (flip Chunk) Empty cs
--- foldr :: Foldable t => (a -> b -> b) -> b -> t a -> b
 
--- reverse a list of possibly-empty chunks into a lazy ByteString
+-- | Reverse a list of possibly-empty chunks into a lazy ByteString.
 revChunks :: Monad m => [P.ByteString] -> r -> ByteString m r
 revChunks cs r = L.foldl' (flip Chunk) (Empty r) cs
 {-# INLINE revChunks #-}
@@ -1679,33 +1273,25 @@ zipWithStream op zs = loop zs
       Return r   -> Return r
       Step fls   -> Step $ fmap (loop xs) (op x fls)
       Effect mls -> Effect $ fmap (loop a) mls
-
 {-# INLINABLE zipWithStream #-}
 
-{- Take a builder constructed otherwise and convert it to a genuine
-   streaming bytestring.
-
->>>  Q.putStrLn $ Q.toStreamingByteString $ stringUtf8 "哈斯克尔" <> stringUtf8 " " <> integerDec 98
-哈斯克尔 98
-
-    <https://gist.github.com/michaelt/6ea89ca95a77b0ef91f3 This benchmark> shows its
-    indistinguishable performance is indistinguishable from @toLazyByteString@
-
-
--}
-
-toStreamingByteString
-  :: MonadIO m => Builder -> ByteString m ()
+-- | Take a builder constructed otherwise and convert it to a genuine streaming
+-- bytestring.
+--
+-- >>>  Q.putStrLn $ Q.toStreamingByteString $ stringUtf8 "哈斯克尔" <> stringUtf8 " " <> integerDec 98
+-- 哈斯克尔 98
+--
+-- <https://gist.github.com/michaelt/6ea89ca95a77b0ef91f3 This benchmark> shows
+-- its indistinguishable performance is indistinguishable from
+-- @toLazyByteString@
+toStreamingByteString :: MonadIO m => Builder -> ByteString m ()
 toStreamingByteString = toStreamingByteStringWith
  (safeStrategy BI.smallChunkSize BI.defaultChunkSize)
 {-# INLINE toStreamingByteString #-}
 
-{-| Take a builder and convert it to a genuine
-   streaming bytestring, using a specific allocation strategy.
--}
-toStreamingByteStringWith
-   :: MonadIO m =>
-      AllocationStrategy -> Builder -> ByteString m ()
+-- | Take a builder and convert it to a genuine streaming bytestring, using a
+-- specific allocation strategy.
+toStreamingByteStringWith :: MonadIO m => AllocationStrategy -> Builder -> ByteString m ()
 toStreamingByteStringWith strategy builder0 = do
        cios <- liftIO (buildStepToCIOS strategy (runBuilder builder0))
        let loop cios0 = case cios0 of
@@ -1723,31 +1309,25 @@ toStreamingByteStringWith strategy builder0 = do
 {-# INLINABLE toStreamingByteStringWith #-}
 {-# SPECIALIZE toStreamingByteStringWith ::  AllocationStrategy -> Builder -> ByteString IO () #-}
 
-
-{- Concatenate a stream of builders (not a streaming bytestring!) into a single builder.
-
->>> let aa = yield (integerDec 10000) >> yield (string8 " is a number.") >> yield (char8 '\n')
->>>  hPutBuilder  IO.stdout $ concatBuilders aa
-10000 is a number.
-
--}
+-- | Concatenate a stream of builders (not a streaming bytestring!) into a
+-- single builder.
+--
+-- >>> let aa = yield (integerDec 10000) >> yield (string8 " is a number.") >> yield (char8 '\n')
+-- >>> hPutBuilder IO.stdout $ concatBuilders aa
+-- 10000 is a number.
 concatBuilders :: Stream (Of Builder) IO () -> Builder
 concatBuilders p = builder $ \bstep r -> do
   case p of
     Return _          -> runBuilderWith mempty bstep r
     Step (b :> rest)  -> runBuilderWith (b `mappend` concatBuilders rest) bstep r
-    Effect m            -> m >>= \p' -> runBuilderWith (concatBuilders p') bstep r
+    Effect m          -> m >>= \p' -> runBuilderWith (concatBuilders p') bstep r
 {-# INLINABLE concatBuilders #-}
 
-
-{-| A simple construction of a builder from a 'ByteString'.
-
->>> let aaa = "10000 is a number\n" :: Q.ByteString IO ()
->>>  hPutBuilder  IO.stdout $ toBuilder  aaa
-10000 is a number
-
-
--}
+-- | A simple construction of a builder from a 'ByteString'.
+--
+-- >>> let aaa = "10000 is a number\n" :: Q.ByteString IO ()
+-- >>>  hPutBuilder  IO.stdout $ toBuilder  aaa
+-- 10000 is a number
 toBuilder :: ByteString IO () -> Builder
 toBuilder  =  concatBuilders . SP.map byteString . toChunks
 {-# INLINABLE toBuilder #-}
