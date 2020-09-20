@@ -85,13 +85,12 @@ import           Control.Monad.Base
 import           Control.Monad.Catch (MonadCatch(..))
 import           Control.Monad.Trans.Resource
 
--- | A space-efficient representation of a succession of 'Word8' vectors, supporting many
--- efficient operations.
+-- | A space-efficient representation of a succession of 'Word8' vectors,
+-- supporting many efficient operations.
 --
 -- An effectful 'ByteString' contains 8-bit bytes, or by using the operations
 -- from "Data.ByteString.Streaming.Char8" it can be interpreted as containing
 -- 8-bit characters.
-
 data ByteString m r =
   Empty r
   | Chunk {-# UNPACK #-} !B.ByteString (ByteString m r )
@@ -191,8 +190,8 @@ instance (MonadResource m) => MonadResource (ByteString m) where
   liftResourceT = lift . liftResourceT
   {-# INLINE liftResourceT #-}
 
-bracketByteString :: (MonadResource m) =>
-       IO a -> (a -> IO ()) -> (a -> ByteString m b) -> ByteString m b
+-- | Like `bracket`, but specialized for `ByteString`.
+bracketByteString :: MonadResource m => IO a -> (a -> IO ()) -> (a -> ByteString m b) -> ByteString m b
 bracketByteString alloc free inside = do
         (key, seed) <- lift (allocate alloc free)
         clean key (inside seed)
@@ -203,7 +202,6 @@ bracketByteString alloc free inside = do
         Go m          -> Go (fmap loop m)
         Chunk bs rest -> Chunk bs (loop rest)
 {-# INLINABLE bracketByteString #-}
-
 
 data SPEC = SPEC | SPEC2
 {-# ANN type SPEC ForceSpecConstr #-}
@@ -284,7 +282,7 @@ smallChunkSize = 4 * k - chunkOverhead
 chunkOverhead :: Int
 chunkOverhead = 2 * sizeOf (undefined :: Int)
 {-# INLINE chunkOverhead #-}
--- ------------------------------------------------------------------------
+
 -- | Packing and unpacking from lists
 -- packBytes' :: Monad m => [Word8] -> ByteString m ()
 -- packBytes' cs0 =
@@ -318,17 +316,15 @@ packBytes cs0 = do
     _  -> Chunk (B.packBytes bytes) (packBytes rest)
 {-# INLINABLE packBytes #-}
 
+-- | Convert a vanilla `Stream` of characters into a stream of bytes.
 packChars :: Monad m => Stream (Of Char) m r -> ByteString m r
 packChars = packBytes . SP.map B.c2w
 {-# INLINABLE packChars #-}
 
-
-
+-- | The reverse of `packChars`. Given a stream of bytes, produce a `Stream`
+-- individual bytes.
 unpackBytes :: Monad m => ByteString m r ->  Stream (Of Word8) m r
-unpackBytes bss = dematerialize bss
-    Return
-    unpackAppendBytesLazy
-    Effect
+unpackBytes bss = dematerialize bss Return unpackAppendBytesLazy Effect
   where
   unpackAppendBytesLazy :: B.ByteString -> Stream (Of Word8) m r -> Stream (Of Word8) m r
   unpackAppendBytesLazy (B.PS fp off len) xs
@@ -349,7 +345,7 @@ unpackBytes bss = dematerialize bss
             loop sentinal (p `plusPtr` (-1)) (Step (x :> acc))
 {-# INLINABLE unpackBytes #-}
 
--- copied from Data.ByteString.Unsafe for compatibility with older bytestring
+-- | Copied from Data.ByteString.Unsafe for compatibility with older bytestring.
 unsafeLast :: B.ByteString -> Word8
 unsafeLast (B.PS x s l) =
     accursedUnutterablePerformIO $ withForeignPtr x $ \p -> peekByteOff p (s+l-1)
@@ -357,12 +353,12 @@ unsafeLast (B.PS x s l) =
       accursedUnutterablePerformIO (IO m) = case m realWorld# of (# _, r #) -> r
 {-# INLINE unsafeLast #-}
 
--- copied from Data.ByteString.Unsafe for compatibility with older bytestring
+-- | Copied from Data.ByteString.Unsafe for compatibility with older bytestring.
 unsafeInit :: B.ByteString -> B.ByteString
 unsafeInit (B.PS ps s l) = B.PS ps s (l-1)
 {-# INLINE unsafeInit #-}
 
--- | Consume the chunks of an effectful ByteString with a natural right fold.
+-- | Consume the chunks of an effectful `ByteString` with a natural right fold.
 foldrChunks :: Monad m => (B.ByteString -> a -> a) -> a -> ByteString m r -> m a
 foldrChunks step nil bs = dematerialize bs
   (\_ -> return nil)
@@ -370,6 +366,8 @@ foldrChunks step nil bs = dematerialize bs
   join
 {-# INLINE foldrChunks #-}
 
+-- | Consume the chunks of an effectful `ByteString` with a left fold. Suitable
+-- for use with `SP.mapped`.
 foldlChunks :: Monad m => (a -> B.ByteString -> a) -> a -> ByteString m r -> m (Of a r)
 foldlChunks f z = go z
   where go a _            | a `seq` False = undefined
@@ -378,24 +376,25 @@ foldlChunks f z = go z
         go a (Go m)       = m >>= go a
 {-# INLINABLE foldlChunks #-}
 
+-- | Instead of mapping over each `Word8` or `Char`, map over each strict
+-- `B.ByteString` chunk in the stream.
 chunkMap :: Monad m => (B.ByteString -> B.ByteString) -> ByteString m r -> ByteString m r
 chunkMap f bs = dematerialize bs return (Chunk . f) Go
 {-# INLINE chunkMap #-}
 
+-- | Like `chunkMap`, but map effectfully.
 chunkMapM :: Monad m => (B.ByteString -> m B.ByteString) -> ByteString m r -> ByteString m r
 chunkMapM f bs = dematerialize bs return (\bs' bss -> Go (fmap (`Chunk` bss) (f bs'))) Go
 {-# INLINE chunkMapM #-}
 
+-- | Like `chunkMapM`, but discard the result of each effectful mapping.
 chunkMapM_ :: Monad m => (B.ByteString -> m x) -> ByteString m r -> m r
 chunkMapM_ f bs = dematerialize bs return (\bs' mr -> f bs' >> mr) join
 {-# INLINE chunkMapM_ #-}
 
-
-{- | @chunkFold@ is preferable to @foldlChunks@ since it is
-     an appropriate argument for @Control.Foldl.purely@ which
-     permits many folds and sinks to be run simulaneously on one bytestream.
-
-  -}
+-- | @chunkFold@ is preferable to @foldlChunks@ since it is an appropriate
+-- argument for @Control.Foldl.purely@ which permits many folds and sinks to be
+-- run simulaneously on one bytestream.
 chunkFold :: Monad m => (x -> B.ByteString -> x) -> x -> (x -> a) -> ByteString m r -> m (Of a r)
 chunkFold step begin done = go begin
   where go a _            | a `seq` False = undefined
@@ -404,11 +403,9 @@ chunkFold step begin done = go begin
         go a (Go m)       = m >>= go a
 {-# INLINABLE chunkFold #-}
 
-{- | @chunkFoldM@ is preferable to @foldlChunksM@ since it is
-     an appropriate argument for @Control.Foldl.impurely@ which
-     permits many folds and sinks to be run simulaneously on one bytestream.
-
-  -}
+-- | @chunkFoldM@ is preferable to @foldlChunksM@ since it is an appropriate
+-- argument for @Control.Foldl.impurely@ which permits many folds and sinks to
+-- be run simulaneously on one bytestream.
 chunkFoldM :: Monad m => (x -> B.ByteString -> m x) -> m x -> (x -> m a) -> ByteString m r -> m (Of a r)
 chunkFoldM step begin done bs = begin >>= go bs
   where
@@ -418,6 +415,7 @@ chunkFoldM step begin done bs = begin >>= go bs
       Go m       -> m >>= \str' -> go str' x
 {-# INLINABLE chunkFoldM  #-}
 
+-- | Like `foldlChunks`, but fold effectfully. Suitable for use with `SP.mapped`.
 foldlChunksM :: Monad m => (a -> B.ByteString -> m a) -> m a -> ByteString m r -> m (Of a r)
 foldlChunksM f z bs = z >>= \a -> go a bs
   where
@@ -427,13 +425,12 @@ foldlChunksM f z bs = z >>= \a -> go a bs
       Go m       -> m >>= go a
 {-# INLINABLE foldlChunksM #-}
 
-
-
 -- | Consume the chunks of an effectful ByteString with a natural right monadic fold.
 foldrChunksM :: Monad m => (B.ByteString -> m a -> m a) -> m a -> ByteString m r -> m a
 foldrChunksM step nil bs = dematerialize bs (const nil) step join
 {-# INLINE foldrChunksM #-}
 
+-- | Internal utility for `unfoldr`.
 unfoldrNE :: Int -> (a -> Either r (Word8, a)) -> a -> (B.ByteString, Either r a)
 unfoldrNE i f x0
     | i < 0     = (B.empty, Right x0)
@@ -447,7 +444,8 @@ unfoldrNE i f x0
                                          go (p `plusPtr` 1) x' (n+1)
 {-# INLINE unfoldrNE #-}
 
-
+-- | Given some continual monadic action that produces strict `B.ByteString`
+-- chuncks, produce a stream of bytes.
 unfoldMChunks :: Monad m => (s -> m (Maybe (B.ByteString, s))) -> s -> ByteString m ()
 unfoldMChunks step = loop where
   loop s = Go $ do
@@ -457,6 +455,7 @@ unfoldMChunks step = loop where
       Just (bs,s') -> return $ Chunk bs (loop s')
 {-# INLINABLE unfoldMChunks #-}
 
+-- | Like `unfoldMChunks`, but feed through a final @r@ return value.
 unfoldrChunks :: Monad m => (s -> m (Either r (B.ByteString, s))) -> s -> ByteString m r
 unfoldrChunks step = loop where
   loop !s = Go $ do
@@ -466,19 +465,16 @@ unfoldrChunks step = loop where
       Right (bs,s') -> return $ Chunk bs (loop s')
 {-# INLINABLE unfoldrChunks #-}
 
-
-{-| Stream chunks from something that contains @IO (Maybe ByteString)@
-    until it returns @Nothing@. @reread@ is of particular use rendering @io-streams@
-    input streams as byte streams in the present sense
-
-> Q.reread Streams.read             :: InputStream B.ByteString -> Q.ByteString IO ()
-> Q.reread (liftIO . Streams.read)  :: MonadIO m => InputStream B.ByteString -> Q.ByteString m ()
-
-The other direction here is
-
-> Streams.unfoldM Q.unconsChunk     :: Q.ByteString IO r -> IO (InputStream B.ByteString)
-
-  -}
+-- | Stream chunks from something that contains @IO (Maybe ByteString)@ until it
+-- returns @Nothing@. @reread@ is of particular use rendering @io-streams@ input
+-- streams as byte streams in the present sense.
+--
+-- > Q.reread Streams.read            :: InputStream B.ByteString -> Q.ByteString IO ()
+-- > Q.reread (liftIO . Streams.read) :: MonadIO m => InputStream B.ByteString -> Q.ByteString m ()
+--
+-- The other direction here is
+--
+-- > Streams.unfoldM Q.unconsChunk    :: Q.ByteString IO r -> IO (InputStream B.ByteString)
 reread :: Monad m => (s -> m (Maybe B.ByteString)) -> s -> ByteString m ()
 reread step s = loop where
   loop = Go $ do
@@ -529,20 +525,16 @@ world
    double the number of constructors associated with each chunk.
 
 -}
-
-copy
-  :: Monad m =>
-     ByteString m r -> ByteString (ByteString m) r
+copy :: Monad m => ByteString m r -> ByteString (ByteString m) r
 copy = loop where
   loop str = case str of
     Empty r       -> Empty r
     Go m          -> Go (fmap loop (lift m))
     Chunk bs rest -> Chunk bs (Go (Chunk bs (Empty (loop rest))))
-
 {-# INLINABLE copy #-}
 
--- | 'findIndexOrEnd' is a variant of findIndex, that returns the length
--- of the string if no element is found, rather than Nothing.
+-- | 'findIndexOrEnd' is a variant of findIndex, that returns the length of the
+-- string if no element is found, rather than Nothing.
 findIndexOrEnd :: (Word8 -> Bool) -> B.ByteString -> Int
 findIndexOrEnd k (B.PS x s l) =
     B.accursedUnutterablePerformIO $
