@@ -4,6 +4,7 @@
 
 - An order-of-magnitude performance improvement in line splitting, thanks to
   Viktor Dukhovni. [#18]
+- Docstring coverage is now 100%.
 
 #### Fixed
 
