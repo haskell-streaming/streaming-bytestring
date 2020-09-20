@@ -402,7 +402,7 @@ unfoldM f = R.unfoldM go where
     Just (c,a') -> Just (c2w c, a')
 {-# INLINE unfoldM #-}
 
--- | Give some pure process that produces characters, generate a stream of bytes.
+-- | Given some pure process that produces characters, generate a stream of bytes.
 unfoldr :: (a -> Either r (Char, a)) -> a -> ByteString m r
 unfoldr step = R.unfoldr (either Left (\(c,a) -> Right (c2w c,a)) . step)
 {-# INLINE unfoldr #-}
