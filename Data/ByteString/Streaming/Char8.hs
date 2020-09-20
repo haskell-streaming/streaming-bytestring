@@ -3,13 +3,20 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
--- | This library emulates "Data.ByteString.Lazy.Char8" but includes a monadic element
---   and thus at certain points uses a `Stream`/`FreeT` type in place of lists.
---   See the documentation for @Data.ByteString.Streaming@ and the examples of
---   of use to implement simple shell operations <https://gist.github.com/michaelt/6c6843e6dd8030e95d58 here>. Examples of use
---   with @http-client@, @attoparsec@, @aeson@, @zlib@ etc. can be found in the
---   'streaming-utils' library.
-
+-- |
+-- Module      : Data.ByteString.Streaming.Char8
+-- Copyright   : (c) Don Stewart 2006
+--               (c) Duncan Coutts 2006-2011
+--               (c) Michael Thompson 2015
+-- License     : BSD-style
+--
+-- This library emulates "Data.ByteString.Lazy.Char8" but includes a monadic
+-- element and thus at certain points uses a `Stream`/@FreeT@ type in place of
+-- lists. See the documentation for @Data.ByteString.Streaming@ and the examples
+-- of of use to implement simple shell operations
+-- <https://gist.github.com/michaelt/6c6843e6dd8030e95d58 here>. Examples of use
+-- with @http-client@, @attoparsec@, @aeson@, @zlib@ etc. can be found in the
+-- 'streaming-utils' library.
 
 module Data.ByteString.Streaming.Char8 (
     -- * The @ByteString@ type
@@ -383,8 +390,8 @@ repeat = R.repeat . c2w
 -- | 'cycle' ties a finite ByteString into a circular one, or equivalently,
 -- the infinite repetition of the original ByteString.
 --
--- | /O(n)/ The 'unfoldr' function is analogous to the Stream \'unfoldr\'.
--- 'unfoldr' builds a ByteString from a seed value. The function takes the
+-- | /O(n)/ The 'unfoldM' function is analogous to the Stream \'unfoldr\'.
+-- 'unfoldM' builds a ByteString from a seed value. The function takes the
 -- element and returns 'Nothing' if it is done producing the ByteString or
 -- returns 'Just' @(a,b)@, in which case, @a@ is a prepending to the ByteString
 -- and @b@ is used as the next element in a recursive call.
@@ -440,9 +447,9 @@ splitWith f = R.splitWith (f . w2c)
 > intercalate [c] . split c == id
 > split == splitWith . (==)
 
-As for all splitting functions in this library, this function does
-not copy the substrings, it just constructs new 'ByteStrings' that
-are slices of the original.
+As for all splitting functions in this library, this function does not copy the
+substrings, it just constructs new 'ByteString's that are slices of the
+original.
 
 >>> Q.stdout $ Q.unlines $ Q.split 'n' "banana peel"
 ba

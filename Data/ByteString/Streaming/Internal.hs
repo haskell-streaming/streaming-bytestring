@@ -9,6 +9,13 @@
 {-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE UnliftedFFITypes      #-}
 
+-- |
+-- Module      : Data.ByteString.Streaming.Internal
+-- Copyright   : (c) Don Stewart 2006
+--               (c) Duncan Coutts 2006-2011
+--               (c) Michael Thompson 2015
+-- License     : BSD-style
+
 module Data.ByteString.Streaming.Internal (
    ByteString (..)
    , consChunk             -- :: S.ByteString -> ByteString m r -> ByteString m r
@@ -190,7 +197,7 @@ instance (MonadResource m) => MonadResource (ByteString m) where
   liftResourceT = lift . liftResourceT
   {-# INLINE liftResourceT #-}
 
--- | Like `bracket`, but specialized for `ByteString`.
+-- | Like @bracket@, but specialized for `ByteString`.
 bracketByteString :: MonadResource m => IO a -> (a -> IO ()) -> (a -> ByteString m b) -> ByteString m b
 bracketByteString alloc free inside = do
         (key, seed) <- lift (allocate alloc free)
@@ -430,7 +437,7 @@ foldrChunksM :: Monad m => (B.ByteString -> m a -> m a) -> m a -> ByteString m r
 foldrChunksM step nil bs = dematerialize bs (const nil) step join
 {-# INLINE foldrChunksM #-}
 
--- | Internal utility for `unfoldr`.
+-- | Internal utility for @unfoldr@.
 unfoldrNE :: Int -> (a -> Either r (Word8, a)) -> a -> (B.ByteString, Either r a)
 unfoldrNE i f x0
     | i < 0     = (B.empty, Right x0)

@@ -3,9 +3,6 @@
 {-# LANGUAGE GADTs        #-}
 {-# LANGUAGE RankNTypes   #-}
 
--- This library emulates Data.ByteString.Lazy but includes a monadic element
--- and thus at certain points uses a `Stream`/`FreeT` type in place of lists.
-
 -- |
 -- Module      : Data.ByteString.Streaming
 -- Copyright   : (c) Don Stewart 2006
@@ -32,11 +29,10 @@
 -- functions in a streaming style, e.g. classic pipeline composition. The
 -- default I\/O chunk size is 32k, which should be good in most circumstances.
 --
--- Some operations, such as 'concat', 'append', 'reverse' and 'cons', have
--- better complexity than their "Data.ByteString" equivalents, due to
--- optimisations resulting from the list spine structure. For other operations
--- streaming, like lazy, ByteStrings are usually within a few percent of strict
--- ones.
+-- Some operations, such as 'concat', 'append', and 'cons', have better
+-- complexity than their "Data.ByteString" equivalents, due to optimisations
+-- resulting from the list spine structure. For other operations streaming, like
+-- lazy, ByteStrings are usually within a few percent of strict ones.
 --
 -- This module is intended to be imported @qualified@, to avoid name clashes
 -- with "Prelude" functions. eg.
@@ -470,7 +466,7 @@ length :: Monad m => ByteString m r -> m (Of Int r)
 length = foldlChunks (\n c -> n + fromIntegral (B.length c)) 0
 {-# INLINE length #-}
 
--- | /O(1)/ 'cons' is analogous to '(:)' for lists.
+-- | /O(1)/ 'cons' is analogous to @(:)@ for lists.
 cons :: Monad m => Word8 -> ByteString m r -> ByteString m r
 cons c cs = Chunk (B.singleton c) cs
 {-# INLINE cons #-}
@@ -739,8 +735,8 @@ cycle :: Monad m => ByteString m r -> ByteString m s
 cycle = forever
 {-# INLINE cycle #-}
 
--- | /O(n)/ The 'unfoldr' function is analogous to the Stream @unfoldr@.
--- 'unfoldr' builds a ByteString from a seed value. The function takes the
+-- | /O(n)/ The 'unfoldM' function is analogous to the Stream @unfoldr@.
+-- 'unfoldM' builds a ByteString from a seed value. The function takes the
 -- element and returns 'Nothing' if it is done producing the ByteString or
 -- returns @'Just' (a,b)@, in which case, @a@ is a prepending to the ByteString
 -- and @b@ is used as the next element in a recursive call.
@@ -754,8 +750,8 @@ unfoldM f s0 = unfoldChunk 32 s0
             (c, Just s')  -> Chunk c (unfoldChunk (n*2) s')
 {-# INLINABLE unfoldM #-}
 
--- | 'unfold' is like 'unfoldr' but stops when the co-algebra returns 'Left';
--- the result is the return value of the @ByteString m r@ @unfoldr uncons = id@
+-- | Like `unfoldM`, but yields a final @r@ when the `Word8` generation is
+-- complete.
 unfoldr :: (a -> Either r (Word8, a)) -> a -> ByteString m r
 unfoldr f s0 = unfoldChunk 32 s0
   where unfoldChunk n s =
@@ -925,9 +921,9 @@ splitWith p (Chunk c0 cs0) = comb [] (B.splitWith p c0) cs0
 -- > intercalate [c] . split c == id
 -- > split == splitWith . (==)
 --
--- As for all splitting functions in this library, this function does
--- not copy the substrings, it just constructs new 'ByteStrings' that
--- are slices of the original.
+-- As for all splitting functions in this library, this function does not copy
+-- the substrings, it just constructs new 'ByteString's that are slices of the
+-- original.
 split :: Monad m => Word8 -> ByteString m r -> Stream (ByteString m) m r
 split w = loop
   where
@@ -1204,7 +1200,7 @@ toHandle :: MonadIO m => Handle -> ByteString m r -> m r
 toHandle = hPut
 {-# INLINE toHandle #-}
 
--- | Pipes-style nomenclature for 'putStr'.
+-- | Pipes-style nomenclature for @putStr@.
 stdout ::  MonadIO m => ByteString m r -> m r
 stdout = hPut IO.stdout
 {-# INLINE stdout #-}
@@ -1260,6 +1256,7 @@ revChunks :: Monad m => [P.ByteString] -> r -> ByteString m r
 revChunks cs r = L.foldl' (flip Chunk) (Empty r) cs
 {-# INLINE revChunks #-}
 
+-- | Zip a list and a stream-of-byte-streams together.
 zipWithStream
   :: (Monad m)
   =>  (forall x . a -> ByteString m x -> ByteString m x)
