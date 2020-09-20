@@ -673,7 +673,7 @@ fold step0 begin finish p0 = loop p0 begin
 {-# INLINABLE fold #-}
 
 -- | 'fold_' keeps the return value of the left-folded bytestring. Useful for
--- simultaneous folds over a segmented bytestream
+-- simultaneous folds over a segmented bytestream.
 fold_ :: Monad m => (x -> Word8 -> x) -> x -> (x -> b) -> ByteString m r -> m (Of b r)
 fold_ step0 begin finish p0 = loop p0 begin
   where

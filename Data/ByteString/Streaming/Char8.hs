@@ -197,6 +197,7 @@ import           Foreign.Ptr
 import           Foreign.Storable
 import qualified System.IO as IO
 
+-- | Given a stream of bytes, produce a vanilla `Stream` of characters.
 unpack ::  Monad m => ByteString m r ->  Stream (Of Char) m r
 unpack bs = case bs of
     Empty r    -> Return r
@@ -220,7 +221,6 @@ unpack bs = case bs of
          | otherwise     = do x <- peek p
                               loop sentinal (p `plusPtr` (-1)) (Step (B.w2c x :> acc))
 {-# INLINABLE unpack #-}
-
 
 -- | /O(n)/ Convert a stream of separate characters into a packed byte stream.
 pack :: Monad m => Stream (Of Char) m r -> ByteString m r
@@ -278,10 +278,12 @@ last_ :: Monad m => ByteString m r -> m Char
 last_ = fmap w2c . R.last_
 {-# INLINE last_ #-}
 
+-- | Like `last_`, but suitable as an argument for `Streaming.mapped`.
 last :: Monad m => ByteString m r -> m (Of (Maybe Char) r)
 last = fmap (\(m:>r) -> fmap w2c m :> r) . R.last
 {-# INLINE last #-}
 
+-- | The 'groupBy' function is a generalized version of 'group'.
 groupBy :: Monad m => (Char -> Char -> Bool) -> ByteString m r -> Stream (ByteString m) m r
 groupBy rel = R.groupBy (\w w' -> rel (w2c w) (w2c w'))
 {-# INLINE groupBy #-}
@@ -321,15 +323,11 @@ intersperse :: Monad m => Char -> ByteString m r -> ByteString m r
 intersperse c = R.intersperse (c2w c)
 {-# INLINE intersperse #-}
 
--- -- | The 'transpose' function transposes the rows and columns of its
--- -- 'ByteString' argument.
--- transpose :: [ByteString] -> [ByteString]
--- transpose css = L.map (\ss -> Chunk (B.pack ss) Empty)
---                       (L.transpose (L.map unpack css))
--- --TODO: make this fast
---
 -- -- ---------------------------------------------------------------------
 -- -- Reducing 'ByteString's
+
+-- | 'fold_' keeps the return value of the left-folded bytestring. Useful for
+-- simultaneous folds over a segmented bytestream.
 fold_ :: Monad m => (x -> Char -> x) -> x -> (x -> b) -> ByteString m () -> m b
 fold_ step begin done p0 = loop p0 begin
   where
@@ -339,7 +337,7 @@ fold_ step begin done p0 = loop p0 begin
         Empty _      -> return (done x)
 {-# INLINABLE fold_ #-}
 
-
+-- | Like `fold_`, but suitable for use with `S.mapped`.
 fold :: Monad m => (x -> Char -> x) -> x -> (x -> b) -> ByteString m r -> m (Of b r)
 fold step begin done p0 = loop p0 begin
   where
@@ -348,21 +346,20 @@ fold step begin done p0 = loop p0 begin
         Go    m      -> m >>= \p' -> loop p' x
         Empty r      -> return (done x :> r)
 {-# INLINABLE fold #-}
+
 -- ---------------------------------------------------------------------
 -- Unfolds and replicates
 
 -- | @'iterate' f x@ returns an infinite ByteString of repeated applications
 -- of @f@ to @x@:
-
+--
 -- > iterate f x == [x, f x, f (f x), ...]
-
 iterate :: (Char -> Char) -> Char -> ByteString m r
 iterate f c = R.iterate (c2w . f . w2c) (c2w c)
 {-# INLINE iterate #-}
 
 -- | @'repeat' x@ is an infinite ByteString, with @x@ the value of every
 -- element.
---
 repeat :: Char -> ByteString m r
 repeat = R.repeat . c2w
 {-# INLINE repeat #-}
@@ -387,11 +384,10 @@ repeat = R.repeat . c2w
 -- the infinite repetition of the original ByteString.
 --
 -- | /O(n)/ The 'unfoldr' function is analogous to the Stream \'unfoldr\'.
--- 'unfoldr' builds a ByteString from a seed value.  The function takes
--- the element and returns 'Nothing' if it is done producing the
--- ByteString or returns 'Just' @(a,b)@, in which case, @a@ is a
--- prepending to the ByteString and @b@ is used as the next element in a
--- recursive call.
+-- 'unfoldr' builds a ByteString from a seed value. The function takes the
+-- element and returns 'Nothing' if it is done producing the ByteString or
+-- returns 'Just' @(a,b)@, in which case, @a@ is a prepending to the ByteString
+-- and @b@ is used as the next element in a recursive call.
 unfoldM :: Monad m => (a -> Maybe (Char, a)) -> a -> ByteString m ()
 unfoldM f = R.unfoldM go where
   go a = case f a of
@@ -399,14 +395,10 @@ unfoldM f = R.unfoldM go where
     Just (c,a') -> Just (c2w c, a')
 {-# INLINE unfoldM #-}
 
-
+-- | Give some pure process that produces characters, generate a stream of bytes.
 unfoldr :: (a -> Either r (Char, a)) -> a -> ByteString m r
 unfoldr step = R.unfoldr (either Left (\(c,a) -> Right (c2w c,a)) . step)
 {-# INLINE unfoldr #-}
-
-
--- ---------------------------------------------------------------------
-
 
 -- | 'takeWhile', applied to a predicate @p@ and a ByteString @xs@,
 -- returns the longest prefix (possibly empty) of @xs@ of elements that
@@ -416,33 +408,22 @@ takeWhile f  = R.takeWhile (f . w2c)
 {-# INLINE takeWhile #-}
 
 -- | 'dropWhile' @p xs@ returns the suffix remaining after 'takeWhile' @p xs@.
-
 dropWhile :: Monad m => (Char -> Bool) -> ByteString m r -> ByteString m r
 dropWhile f = R.dropWhile (f . w2c)
 {-# INLINE dropWhile #-}
 
-{- | 'break' @p@ is equivalent to @'span' ('not' . p)@.
-
--}
+-- | 'break' @p@ is equivalent to @'span' ('not' . p)@.
 break :: Monad m => (Char -> Bool) -> ByteString m r -> ByteString m (ByteString m r)
 break f = R.break (f . w2c)
 {-# INLINE break #-}
 
---
 -- | 'span' @p xs@ breaks the ByteString into two segments. It is
 -- equivalent to @('takeWhile' p xs, 'dropWhile' p xs)@
 span :: Monad m => (Char -> Bool) -> ByteString m r -> ByteString m (ByteString m r)
 span p = break (not . p)
 {-# INLINE span #-}
 
--- -- | /O(n)/ Splits a 'ByteString' into components delimited by
--- -- separators, where the predicate returns True for a separator element.
--- -- The resulting components do not contain the separators.  Two adjacent
--- -- separators result in an empty component in the output.  eg.
--- --
--- -- > splitWith (=='a') "aabbaca" == ["","","bb","c",""]
--- -- > splitWith (=='a') []        == []
--- --
+-- | Like `split`, but you can supply your own splitting predicate.
 splitWith :: Monad m => (Char -> Bool) -> ByteString m r -> Stream (ByteString m) m r
 splitWith f = R.splitWith (f . w2c)
 {-# INLINE splitWith #-}
@@ -471,16 +452,9 @@ a peel
 split :: Monad m => Char -> ByteString m r -> Stream (ByteString m) m r
 split c = R.split (c2w c)
 {-# INLINE split #-}
+
 -- -- ---------------------------------------------------------------------
 -- -- Searching ByteStrings
---
--- -- | /O(n)/ 'elem' is the 'ByteString' membership predicate.
--- elem :: Word8 -> ByteString -> Bool
--- elem w cs = case elemIndex w cs of Nothing -> False ; _ -> True
---
--- -- | /O(n)/ 'notElem' is the inverse of 'elem'
--- notElem :: Word8 -> ByteString -> Bool
--- notElem w cs = not (elem w cs)
 
 -- | /O(n)/ 'filter', applied to a predicate and a ByteString,
 -- returns a ByteString containing those characters that satisfy the
@@ -489,18 +463,14 @@ filter :: Monad m => (Char -> Bool) -> ByteString m r -> ByteString m r
 filter p = R.filter (p . w2c)
 {-# INLINE filter #-}
 
-
-
-{- | 'lines' turns a ByteString into a connected stream of ByteStrings at
-     divide at newline characters. The resulting strings do not contain newlines.
-     This is the genuinely streaming 'lines' which only breaks chunks, and
-     thus never increases the use of memory.
-
-     Because 'ByteString's are usually read in binary mode, with no line
-     ending conversion, this function recognizes both @\\n@ and @\\r\\n@
-     endings (regardless of the current platform).
--}
-
+-- | 'lines' turns a ByteString into a connected stream of ByteStrings at divide
+-- at newline characters. The resulting strings do not contain newlines. This is
+-- the genuinely streaming 'lines' which only breaks chunks, and thus never
+-- increases the use of memory.
+--
+-- Because 'ByteString's are usually read in binary mode, with no line ending
+-- conversion, this function recognizes both @\\n@ and @\\r\\n@ endings
+-- (regardless of the current platform).
 lines :: forall m r . Monad m => ByteString m r -> Stream (ByteString m) m r
 lines text0 = loop1 text0
   where
@@ -564,12 +534,11 @@ unlines = loop where
 {-# INLINABLE unlines #-}
 
 -- | 'words' breaks a byte stream up into a succession of byte streams
---   corresponding to words, breaking Chars representing white space. This is
---   the genuinely streaming 'words'. A function that returns individual
---   strict bytestrings would concatenate even infinitely
---   long words like @cycle "y"@ in memory. It is best for the user who
---   has reflected on her materials to write `mapped toStrict . words` or the like,
---   if strict bytestrings are needed.
+-- corresponding to words, breaking Chars representing white space. This is the
+-- genuinely streaming 'words'. A function that returns individual strict
+-- bytestrings would concatenate even infinitely long words like @cycle "y"@ in
+-- memory. It is best for the user who has reflected on her materials to write
+-- `mapped toStrict . words` or the like, if strict bytestrings are needed.
 words :: Monad m => ByteString m r -> Stream (ByteString m) m r
 words =  filtered . R.splitWith B.isSpaceWord8
  where
@@ -676,19 +645,23 @@ newline :: Word8
 newline = 10
 {-# INLINE newline #-}
 
+-- | Promote a vanilla `String` into a stream.
 string :: String -> ByteString m ()
 string = chunk . B.pack . Prelude.map B.c2w
 {-# INLINE string #-}
 
-
+-- | Returns the number of times its argument appears in the `ByteString`.
 count_ :: Monad m => Char -> ByteString m r -> m Int
 count_ c = R.count_ (c2w c)
 {-# INLINE count_ #-}
 
+-- | Like `count_`, but suitable for use with `Streaming.mapped`.
 count :: Monad m => Char -> ByteString m r -> m (Of Int r)
 count c = R.count (c2w c)
 {-# INLINE count #-}
 
+-- | /O(1)/ Extract the head and tail of a 'ByteString', or its return value if
+-- it is empty. This is the \'natural\' uncons for an effectful byte stream.
 nextChar :: Monad m => ByteString m r -> m (Either r (Char, ByteString m r))
 nextChar b = do
   e <- R.nextByte b
@@ -696,10 +669,12 @@ nextChar b = do
     Left r       -> return $! Left r
     Right (w,bs) -> return $! Right (w2c w, bs)
 
+-- | Print a stream of bytes to STDOUT.
 putStr :: MonadIO m => ByteString m r -> m r
 putStr = hPut IO.stdout
 {-# INLINE putStr #-}
 
+-- | Print a stream of bytes to STDOUT, ending with a final @\n@.
 putStrLn :: MonadIO m => ByteString m r -> m r
 putStrLn bs = hPut IO.stdout (snoc bs '\n')
 {-# INLINE putStrLn #-}
@@ -713,8 +688,7 @@ putStrLn bs = hPut IO.stdout (snoc bs '\n')
 -- , count
 -- , count'
 
-{-| This will read positive or negative Ints that require 18 or fewer characters.
--}
+-- | This will read positive or negative Ints that require 18 or fewer characters.
 readInt :: Monad m => ByteString m r -> m (Compose (Of (Maybe Int)) (ByteString m) r)
 readInt = go . toStrict . splitAt 18 where
   go m = do
@@ -731,5 +705,3 @@ readInt = go . toStrict . splitAt 18 where
                else Compose (Just n :> (chunk more >> cons' c rest'))
         else return (Compose (Just n :> (chunk more >> rest)))
 {-# INLINABLE readInt #-}
-
-         -- uncons :: Monad m => ByteString m r -> m (Either r (Char, ByteString m r))
