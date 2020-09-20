@@ -1,124 +1,105 @@
-streaming-bytestring
-====================
-[![Hackage](https://img.shields.io/hackage/v/streaming-bytestring.svg)](https://hackage.haskell.org/package/streaming-bytestring) [![Build Status](https://travis-ci.org/haskell-streaming/streaming-bytestring.svg?branch=master)](https://travis-ci.org/haskell-streaming/streaming-bytestring)
+# streaming-bytestring
 
-This package depends on the [`streaming` library](https://github.com/haskell-streaming/streaming)
+[![Build](https://github.com/haskell-streaming/streaming-bytestring/workflows/Tests/badge.svg)](https://github.com/haskell-streaming/streaming-bytestring/actions)
+[![Build Status](https://travis-ci.org/haskell-streaming/streaming-bytestring.svg?branch=master)](https://travis-ci.org/haskell-streaming/streaming-bytestring)
+[![Hackage](https://img.shields.io/hackage/v/streaming-bytestring.svg)](https://hackage.haskell.org/package/streaming-bytestring)
 
+This library enables fast and safe streaming of byte data, in either `Word8` or
+`Char` form. It is a core addition to the [`streaming`
+ecosystem](https://github.com/haskell-streaming/) and avoids the usual pitfalls
+of combinbing lazy `ByteString`s with lazy `IO`.
 
-              copy 200M file    divide it on lines, 
-                                adding '!' to each 
-                                
-    lazy      0m0.813s          0m8.597s
-    streaming 0m0.783s          0m9.664s
-    pipes     0m0.771s          0m49.176s
-    conduit	  0m1.068s          2m25.437s
+This library is used by
+[`streaming-attoparsec`](http://hackage.haskell.org/package/streaming-attoparsec)
+to enable vanilla [Attoparsec](http://hackage.haskell.org/package/attoparsec)
+parsers to work with `streaming` "for free".
 
-This library is modeled as far as possible on the internal structure of
-`Data.ByteString.Lazy`. There are two changes: a chunk may be delayed
-by a monadic step, and the sucession of steps has a 'return' value:
+## Usage
+
+### Importing and Types
+
+Modules from this library are intended to be imported qualified. To avoid
+conflicts with both the `bytestring` library and `streaming`, we recommended `Q`
+as the qualified name:
 
 ```haskell
-data ByteString m r
-  = Empty r
-  | Chunk {-# UNPACK #-} !S.ByteString (ByteString m r)
-  | Go (m (ByteString m r ))
+import qualified Data.ByteString.Streaming.Char8 as Q
 ```
-unlike 
+
+Like the `bytestring` library, leaving off the `Char8` will expose an API based
+on `Word8`. Following the philosophy of `streaming` that "the best API is the
+one you already know", these APIs are based closely on `bytestring`. The core
+type is `ByteString m r`, where:
+
+- `m`: The Monad used to fetch further chunks from the "source", usually `IO`.
+- `r`: The final return value after all streaming has concluded, usually `()` as in `streaming`.
+
+You can imagine this type to represent an infinitely-sized collection of bytes,
+although internally it references a **strict** `ByteString` no larger than 32kb,
+followed by monadic instructions to fetch further chunks.
+
+### Examples
+
+#### File Input
+
+To open a file of any size and count its characters:
+
 ```haskell
-data ByteString
-  = Empty 
-  | Chunk {-# UNPACK #-} !S.ByteString ByteString
-```  
-That's it. 
+import Control.Monad.Trans.Resource (runResourceT)
+import qualified Data.ByteString.Streaming.Char8 as Q
 
------
+-- | Represents a potentially-infinite stream of `Char`.
+chars :: ByteString IO ()
+chars = Q.readFile "huge-file.txt"
 
-Another module is planned that would correspond more closely to 
-`Pipes.Bytestring` than to `Data.ByteString.Lazy`.   
-`Producer ByteString m r` as it is treated in `pipes-bytestring` as
-the `ByteString m r` type is here. The result is much faster, at least 
-with preliminary tests. The modules integrating `attoparsec` and `aeson` 
-are simple replicas of k0001's `pipes-attoparsec` and `pipes-aeson`. 
-Also included is a replica of `pipes-http`.
+main :: IO ()
+main = runResourceT (Q.length_ chars) >>= print
+```
 
-It is possible that `streaming-bytestring` is conceptually clearer than 
-`pipes-bytestring` as well - and clearer than the approach taken by 
-`conduit` and `io-streams`.  All of these are forced to integrate the 
-conception of *an amorphous succession of bytes that may be chunked anywhere* - 
-the direct result of, say, `fromHandle`, `sourceFile` and
-the like - and a succession of 'semantically' distinct bytestrings 
-of interest under a single concept. 
+Note that file IO specifically requires the
+[`resourcet`](http://hackage.haskell.org/package/resourcet) library.
 
-----
+#### Line splitting and `Stream` interop
 
-Strange as it may seem, it is arguable that the general `Producer`, 
-`Source`, and `InputStream` concepts from these libraries ought not 
-to hold `ByteString`s *except* as conceptually separate units, e.g. 
-the lines of a document taken as strict bytestrings, where that is 
-legitimate. An `InputStream ByteString` is like an `InputStream Int`; 
-a `Conduit.Source m ByteString` has the same type as a `Source m Int`;
-a `Pipes.Producer ByteString m r` has the same type as a `Producer Int m r`.
-These types are suited to the general stream transformations these 
-libraries make possible. 
+In the example above you may have noticed a lack of `Of` that we usually see
+with `Stream`. Our old friend `lines` hints at this too:
 
-We can see the strangeness in the `io-streams` `lines` 
+```haskell
+lines :: Monad m => ByteString m r -> Stream (ByteString m) m r
+```
 
-    lines :: InputStream ByteString -> IO (InputStream ByteString)
+A stream-of-streams, yet no `Of` here either. The return type can't naively be
+`Stream (Of ByteString) m r`, since the first line break might be at the very
+end of a large file. Forcing that into a single strict `ByteString` would crash
+your program.
 
-and the `conduit` `linesUnboundedAscii`
+To count the number of lines whose first letter is `i`:
 
-    linesUnboundedAscii :: (Monad m) => Conduit ByteString m ByteString
-    
-(specializing slightly). In either case, what enters on the left will
-be a succession of anyhow-chunked bytes; what exits on the right will 
-be a succession of significant individual things of type `ByteString`.  
+```haskell
+countOfI :: IO Int
+countOfI = runResourceT
+  . S.length_                   -- IO Int
+  . S.filter (== 'i')           -- Stream (Of Char) IO ()
+  . S.concat                    -- Stream (Of Char) IO ()
+  . S.mapped Q.head             -- Stream (Of (Maybe Char)) IO ()
+  . Q.lines                     -- Stream (Bytestring IO) IO ()
+  $ Q.readFile "huge-file.txt"  -- ByteString IO ()
+```
 
-What we find in `IOStreams.lines` and
-`linesUnlimitedAscii` are comparable to what we would have if `bytestring`
-defined 
+Critically, there are several functions which when combined with `mapped` can
+bring us back into `Of`-land:
 
-    lines :: L.ByteString -> [S.ByteString]
-   
-or more absurdly
+```haskell
+head     :: Monad m => ByteString m r -> m (Of (Maybe Char) r)
+last     :: Monad m => ByteString m r -> m (Of (Maybe Char) r)
+null     :: Monad m => ByteString m r -> m (Of Bool) r)
+count    :: Monad m => ByteString m r -> m (Of Int) r)
+toLazy   :: Monad m => ByteString m r -> m (Of ByteString r) -- Be careful with this.
+toStrict :: Monad m => ByteString m r -> m (Of ByteString r) -- Be even *more* careful with this.
+```
 
-    lines :: L.ByteString -> L.ByteString 
+When moving in the opposite direction API-wise, consider:
 
-and exposed methods for inspecting the hitherto secret chunks contained
-in lazy bytestrings. 
-
-The model employed by the present package is a little different.  First, 
-the primitive `lines` concept is just
-
-    lines :: ByteString m r -> Stream (ByteString m) m r
-
-as in `pipes-bytestring`; this corresponds precisely to 
-
-    lines :: ByteString -> [ByteString]
-
-as it appears in `Data.ByteString.Lazy` -- the elements of the list (stream) are 
-themselves lazy bytestrings. 
-
-But `pipes-bytestring` attempts to *mean* by `Producer ByteString m r` 
-what we express by `ByteString m r` - the undifferentiated byte stream.
-But (we are provisionally suggesting) that isn't what `Producer ByteString m r` 
-means, and this is part of the reason why `pipes-bytestring` is difficult 
-for people to grasp. The user frequently proposes to inspect and work 
-with individual lines with Pipes themselves and thus needs
-
-    produceLines :: Producer ByteString m r -> Producer ByteString m r
-    produceLines = folds B.concat B.empty id . view Pipes.ByteString.lines
-    
-Here we would instead write a 
-
-    produceLines :: ByteString m r -> Stream (Of ByteString) m r
-
-which is transparently related to the type of lines itself
-
-    lines :: ByteString m r -> Stream (ByteString m) m r
-
-The distinctive type of `produceLines` clearly express the transition 
-from the world of amorphously chunked bytestreams to the world of 
-significant individual values, in this case individual strict bytestrings.  
-
-
-
+```haskell
+fromChunks :: Stream (Of ByteString) m r -> ByteString m r
+```
