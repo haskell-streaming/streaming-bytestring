@@ -401,7 +401,7 @@ chunkMapM_ f bs = dematerialize bs return (\bs' mr -> f bs' >> mr) join
 
 -- | @chunkFold@ is preferable to @foldlChunks@ since it is an appropriate
 -- argument for @Control.Foldl.purely@ which permits many folds and sinks to be
--- run simulaneously on one bytestream.
+-- run simultaneously on one bytestream.
 chunkFold :: Monad m => (x -> B.ByteString -> x) -> x -> (x -> a) -> ByteString m r -> m (Of a r)
 chunkFold step begin done = go begin
   where go a _            | a `seq` False = undefined
@@ -410,9 +410,9 @@ chunkFold step begin done = go begin
         go a (Go m)       = m >>= go a
 {-# INLINABLE chunkFold #-}
 
--- | @chunkFoldM@ is preferable to @foldlChunksM@ since it is an appropriate
--- argument for @Control.Foldl.impurely@ which permits many folds and sinks to
--- be run simulaneously on one bytestream.
+-- | 'chunkFoldM' is preferable to 'foldlChunksM' since it is an appropriate
+-- argument for 'Control.Foldl.impurely' which permits many folds and sinks to
+-- be run simultaneously on one bytestream.
 chunkFoldM :: Monad m => (x -> B.ByteString -> m x) -> m x -> (x -> m a) -> ByteString m r -> m (Of a r)
 chunkFoldM step begin done bs = begin >>= go bs
   where
@@ -452,7 +452,7 @@ unfoldrNE i f x0
 {-# INLINE unfoldrNE #-}
 
 -- | Given some continual monadic action that produces strict `B.ByteString`
--- chuncks, produce a stream of bytes.
+-- chunks, produce a stream of bytes.
 unfoldMChunks :: Monad m => (s -> m (Maybe (B.ByteString, s))) -> s -> ByteString m ()
 unfoldMChunks step = loop where
   loop s = Go $ do
@@ -473,7 +473,7 @@ unfoldrChunks step = loop where
 {-# INLINABLE unfoldrChunks #-}
 
 -- | Stream chunks from something that contains @IO (Maybe ByteString)@ until it
--- returns @Nothing@. @reread@ is of particular use rendering @io-streams@ input
+-- returns 'Nothing'. 'reread' is of particular use rendering @io-streams@ input
 -- streams as byte streams in the present sense.
 --
 -- > Q.reread Streams.read            :: InputStream B.ByteString -> Q.ByteString IO ()

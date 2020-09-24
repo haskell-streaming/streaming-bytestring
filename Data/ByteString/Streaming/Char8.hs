@@ -541,11 +541,11 @@ unlines = loop where
 {-# INLINABLE unlines #-}
 
 -- | 'words' breaks a byte stream up into a succession of byte streams
--- corresponding to words, breaking Chars representing white space. This is the
+-- corresponding to words, breaking on 'Char's representing white space. This is the
 -- genuinely streaming 'words'. A function that returns individual strict
 -- bytestrings would concatenate even infinitely long words like @cycle "y"@ in
--- memory. It is best for the user who has reflected on her materials to write
--- `mapped toStrict . words` or the like, if strict bytestrings are needed.
+-- memory. When the stream is known to not contain unreasonably long words, you can write
+`mapped toStrict . words` or the like, if strict bytestrings are needed.
 words :: Monad m => ByteString m r -> Stream (ByteString m) m r
 words =  filtered . R.splitWith B.isSpaceWord8
  where
