@@ -412,7 +412,10 @@ unfoldM f = R.unfoldM go where
     Just (c,a') -> Just (c2w c, a')
 {-# INLINE unfoldM #-}
 
--- | Given some pure process that produces characters, generate a stream of bytes.
+-- | Given some pure process that produces characters, generate a stream of
+-- bytes. The @r@ produced by the final `Left` will be the return value at the
+-- end of the stream. Note also that the `Char` values will be truncated to
+-- 8-bits.
 unfoldr :: (a -> Either r (Char, a)) -> a -> ByteString m r
 unfoldr step = R.unfoldr (either Left (\(c,a) -> Right (c2w c,a)) . step)
 {-# INLINE unfoldr #-}
@@ -664,6 +667,8 @@ newline = 10
 {-# INLINE newline #-}
 
 -- | Promote a vanilla `String` into a stream.
+--
+-- /Note:/ Each `Char` is truncated to 8 bits.
 string :: String -> ByteString m ()
 string = chunk . B.pack . Prelude.map B.c2w
 {-# INLINE string #-}
@@ -677,7 +682,7 @@ count_ c = R.count_ (c2w c)
 -- Suitable for use with `SP.mapped`:
 --
 -- @
--- S.mapped (Q.count 'a') :: Stream (Q.ByteString m) m r -> Stream (Of Int) m r
+-- S.mapped (Q.count \'a\') :: Stream (Q.ByteString m) m r -> Stream (Of Int) m r
 -- @
 count :: Monad m => Char -> ByteString m r -> m (Of Int r)
 count c = R.count (c2w c)
@@ -698,18 +703,12 @@ putStr = hPut IO.stdout
 {-# INLINE putStr #-}
 
 -- | Print a stream of bytes to STDOUT, ending with a final @\n@.
+--
+-- /Note:/ The final @\n@ is not added atomically, and in certain multi-threaded
+-- scenarios might not appear where expected.
 putStrLn :: MonadIO m => ByteString m r -> m r
 putStrLn bs = hPut IO.stdout (snoc bs '\n')
 {-# INLINE putStrLn #-}
--- , head'
--- , last
--- , last'
--- , length
--- , length'
--- , null
--- , null'
--- , count
--- , count'
 
 -- | This will read positive or negative Ints that require 18 or fewer characters.
 readInt :: Monad m => ByteString m r -> m (Compose (Of (Maybe Int)) (ByteString m) r)

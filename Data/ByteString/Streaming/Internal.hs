@@ -324,6 +324,8 @@ packBytes cs0 = do
 {-# INLINABLE packBytes #-}
 
 -- | Convert a vanilla `Stream` of characters into a stream of bytes.
+--
+-- /Note:/ Each `Char` value is truncated to 8 bits.
 packChars :: Monad m => Stream (Of Char) m r -> ByteString m r
 packChars = packBytes . SP.map B.c2w
 {-# INLINABLE packChars #-}
