@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Main ( main ) where
@@ -9,10 +10,12 @@ import qualified Data.ByteString.Streaming as Q
 import qualified Data.ByteString.Streaming.Char8 as Q8
 import qualified Data.ByteString.Streaming.Internal as QI
 import           Data.Function (on)
+import           Data.Functor.Compose (Compose(..))
 import           Data.Functor.Identity
 import qualified Data.List as L
 import           Data.String (fromString)
 import qualified Streaming as SM
+import           Streaming (Of(..))
 import qualified Streaming.Prelude as S
 import           System.IO
 import           Test.SmallCheck.Series
@@ -114,6 +117,136 @@ firstI = do
     $ Q8.readFile "tests/groupBy.txt"  -- ByteString IO ()
   l @?= 57
 
+readIntCases :: Assertion
+readIntCases = do
+  ( Q8.readInt
+    $ QI.Chunk "123"
+    $ QI.Empty () ) >>= pure . getCompose >>= \case
+    Just 123 :> bs -> Q.null_ bs >>= assertBool "Empty readInt1 tail"
+    _              -> assertBool "Correct readInt1 value" False
+  --
+  ( Q8.readInt
+    $ QI.Chunk "123"
+    $ QI.Chunk "456"
+    $ QI.Empty () ) >>= pure . getCompose >>= \case
+    Just 123456 :> bs -> Q.null_ bs >>= assertBool "Empty readInt2 tail"
+    _                 -> assertBool "Correct readInt2 value" False
+  --
+  ( Q8.readInt
+    $ QI.Chunk "-123"
+    $ QI.Chunk "456"
+    $ QI.Empty () ) >>= pure . getCompose >>= \case
+    Just (-123456) :> bs -> Q.null_ bs >>= assertBool "Empty readInt3 tail"
+    _                    -> assertBool "Correct readInt3 value" False
+  --
+  ( Q8.readInt
+    $ QI.Chunk "-123"
+    $ QI.Chunk "456"
+    $ QI.Chunk "789"
+    $ QI.Chunk "-42"
+    $ QI.Empty () ) >>= pure . getCompose >>= \case
+    Just (-123456789) :> bs -> Q.toStrict_ bs >>=
+                               assertBool "Correct readInt4 tail" . (== "-42")
+    _                       -> assertBool "Correct readInt4 value" False
+  --
+  ( Q8.readInt
+    $ QI.Chunk "-123"
+    $ QI.Go $ pure
+    $ QI.Chunk "456789123456789123456789123456789"
+    $ QI.Chunk "+42"
+    $ QI.Empty () ) >>= pure . getCompose >>= \case
+    Just n :> bs -> do
+                    let m = -123456789123456789123456789123456789 :: Integer
+                        i = fromIntegral m
+                    assertBool "Correct readInt5 value" $ n == i
+                    Q.toStrict_ bs >>=
+                        assertBool "Correct readInt5 tail" . (== "+42")
+  --
+  ( Q8.readInt' ((Q8.dropWhile (== ' ') .) . QI.Chunk)
+    $ QI.Chunk "+123"
+    $ QI.Go $ pure
+    $ QI.Chunk "456789"
+    $ QI.Chunk "123456789"
+    $ QI.Go $ pure
+    $ QI.Chunk "123456789"
+    $ QI.Go $ pure
+    $ QI.Go $ pure
+    $ QI.Chunk "123456789 foo"
+    $ QI.Empty () ) >>= pure . getCompose >>= \case
+    Just n :> bs -> do
+                    let m = 123456789123456789123456789123456789 :: Integer
+                        i = fromIntegral m
+                    assertBool "Correct readInt6' value" $ n == i
+                    Q.toStrict_ bs >>=
+                        assertBool "Correct readInt6' tail" . (== "foo")
+  --
+  ( Q8.readInt' ((Q8.dropWhile (== ' ') .) . QI.Chunk)
+    $ QI.Chunk "-123"
+    $ QI.Go $ pure
+    $ QI.Chunk "456789"
+    $ QI.Chunk "123456789"
+    $ QI.Go $ pure
+    $ QI.Chunk "123456789"
+    $ QI.Chunk "123456789 "
+    $ QI.Chunk "          "
+    $ QI.Chunk "          "
+    $ QI.Chunk "       -42"
+    $ QI.Empty () ) >>= pure . getCompose >>= \case
+    Just n :> bs -> do
+                    let m = -123456789123456789123456789123456789 :: Integer
+                        i = fromIntegral m
+                    assertBool "Correct readInt7' value" $ n == i
+                    Q.toStrict_ bs >>=
+                        assertBool "Correct readInt7' tail" . (== "-42")
+  --
+  ( Q8.readInt' ((Q8.dropWhile (== ' ') .) . QI.Chunk)
+    $ QI.Chunk "-123"
+    $ QI.Go $ pure
+    $ QI.Chunk "456789"
+    $ QI.Chunk "123456789"
+    $ QI.Go $ pure
+    $ QI.Chunk "123456789"
+    $ QI.Chunk "123456789 "
+    $ QI.Chunk "          "
+    $ QI.Chunk "          "
+    $ QI.Chunk "          "
+    $ QI.Empty 42 ) >>= pure . getCompose >>= \case
+    Just n :> bs -> do
+                    let m = -123456789123456789123456789123456789 :: Integer
+                        i = fromIntegral m
+                    assertBool "Correct readInt8' value" $ n == i
+                    Q.toStrict bs >>= assertBool "Correct readInt8' tail" . (== ("" :> (42 :: Int)))
+  --
+  ( Q8.readInt' ((Q8.dropWhile (== ' ') .) . QI.Chunk)
+    $ QI.Chunk "-123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+    $ QI.Empty 42 ) >>= pure . getCompose >>= \case
+    Just n :> bs -> do
+                    -- The last 128 digits are "surely" enough.  (This test will break if
+                    -- Haskell some day ends up with 256-bit 'Int's.
+                    let m = -91234567891234567891234567891234567891234567891234567890123456789123456789123456789123456789123456789123456789123456789123456789 :: Integer
+                        i = fromIntegral m
+                    assertBool "Correct readInt9' value" $ n == i
+                    Q.toStrict bs >>= assertBool "Correct readInt9' tail" . (== ("" :> (42 :: Int)))
+
 main :: IO ()
 main = defaultMain $ testGroup "Tests"
   [ testGroup "Property Tests"
@@ -148,5 +281,6 @@ main = defaultMain $ testGroup "Tests"
     , testCase "groupBy: Char order" groupByCharOrder
     , testCase "findIndexOrEnd" goodFindIndex
     , testCase "Stream Interop" firstI
+    , testCase "readInt" readIntCases
     ]
   ]

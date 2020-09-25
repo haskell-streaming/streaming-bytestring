@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE CPP                 #-}
+{-# LANGUAGE MultiWayIf          #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -22,6 +23,7 @@
 module Data.ByteString.Streaming.Char8 (
     -- * The @ByteString@ type
     ByteString
+    , Chunker
 
     -- * Introducing and eliminating 'ByteString's
     , empty            -- empty :: ByteString m ()
@@ -118,6 +120,7 @@ module Data.ByteString.Streaming.Char8 (
     , count
     , count_
     , readInt
+    , readInt'
     -- * I\/O with 'ByteString's
 
     -- ** Standard input and output
@@ -197,7 +200,7 @@ import           Data.ByteString.Streaming
     unconsChunk, writeFile)
  --   hPutNonBlocking,
 
-import           Data.Char (isDigit)
+import           Data.Bits (finiteBitSize) -- Since GHC 7.8
 import           Data.Word (Word8)
 import           Foreign.ForeignPtr (withForeignPtr)
 import           Foreign.Ptr
@@ -710,20 +713,155 @@ putStrLn :: MonadIO m => ByteString m r -> m r
 putStrLn bs = hPut IO.stdout (snoc bs '\n')
 {-# INLINE putStrLn #-}
 
--- | This will read positive or negative Ints that require 18 or fewer characters.
-readInt :: Monad m => ByteString m r -> m (Compose (Of (Maybe Int)) (ByteString m) r)
-readInt = go . toStrict . splitAt 18 where
-  go m = do
-    (bs :> rest) <- m
-    case Char8.readInt bs of
-      Nothing -> return (Compose (Nothing :> (chunk bs >> rest)))
-      Just (n,more) -> if B.null more
-        then do
-          e <- uncons rest
-          return $ case e of
-            Left r -> Compose (Just n :> return r)
-            Right (c,rest') -> if isDigit c
-               then Compose (Nothing :> (chunk bs >> cons' c rest'))
-               else Compose (Just n :> (chunk more >> cons' c rest'))
-        else return (Compose (Just n :> (chunk more >> rest)))
-{-# INLINABLE readInt #-}
+-- | Type of a function that constructs a streaming ByteString from an
+-- initial strict 'BC.ByteString' segment (possibly empty) and the rest
+-- of the stream.  The simplest such function is the internal 'Chunk'
+-- constructor which just prepends the strict segment to the stream.
+--
+-- A non-trivial transformation might prepare the stream for reading the
+-- next element of a run of whitespace separated values, by removing
+-- leading whitespace from its initial segment, and if that is then
+-- empty typically also the rest of the stream (via 'dropWhile').  Note
+-- that an unbounded stream consisting entirely of whitespace could then
+-- block indefinitely when the its next character is requested.  If
+-- that's a concern, the transformation may choose to trim just a
+-- suitable bounded-length initial segment of the stream, and a suitable
+-- error could subsequently be raised when unexpected leading whitespace
+-- is encountered as a result of an unexpectedly long run of spaces.
+--
+type Chunker m r = (B.ByteString -> ByteString m r -> ByteString m r)
+-- XXX: Bikeshed a better name?
+
+-- | Try to read an 'Int' value from the 'ByteString', returning 'm
+-- (Compose (Just n :> t))` on success, where @n@ is the value read and
+-- @t@ is the rest of the input streaming 'ByteString'.  If the stream
+-- of digits decodes to a value larger than can be represented by an
+-- 'Int', the result will overflow and will not match the input digits.
+-- Input is consumed until no more digits remain.  If the stream is an
+-- unbounded run of decimal digits, this function may never return.  If
+-- that's a concern, you can split the stream into an initial segment
+-- with an apporpriate maximum length and a tail, and apply 'readInt' to
+-- just the initial segment.
+--
+-- This function is just a wrapper around 'readInt'' with 'Chunk' as its
+-- tail transformation function.
+--
+readInt :: Monad m
+        => ByteString m r
+        -> m (Compose (Of (Maybe Int)) (ByteString m) r)
+{-# INLINE readInt #-}
+readInt = readInt' Chunk
+
+-- | Try to read an 'Int' value from the 'ByteString', returning 'm
+-- (Compose (Just n :> t))' on success, where @n@ is the value read and
+-- @t@ is the rest of the input streaming 'ByteString' computed by
+-- applying the provided 'Chunker' function to the first non-empty chunk
+-- following the parsed number and the rest of the stream.  The function
+-- is not called, and the stream is returned as-is, preceding by
+-- 'Nothing' for the ('Maybe' 'Int') result, when no number is found at
+-- the start of the stream.
+--
+-- The 'Chunker' function can be used, for example, to discard trailing
+-- whitespace, positioning the stream at the next potential input value.
+-- It is up to the function to discard whitespace from any subsequent
+-- chunks if the remainder of the first chunk is all whitespace, it is
+-- not called recursively on its own output even when the result would
+-- have an empty first chunk.
+--
+-- If the stream of digits decodes to a value larger than can be
+-- represented by an 'Int', the result will overflow, and will not match
+-- the input digits.  Input is consumed until no more digits remain.  If
+-- the stream is an unbound run of decimal digits, this function may
+-- never return.  If that's a concern, you can split the stream into an
+-- initial segment with an apporpriate maximum length and a tail, and
+-- apply 'readInt' to just the initial segment.
+--
+readInt' :: Monad m
+         => Chunker m r    -- ^ 'Chunker' function for the tail of the stream
+         -> ByteString m r -- ^ Input stream
+         -> m (Compose (Of (Maybe Int)) (ByteString m) r)
+{-# INLINE readInt' #-}
+-- While dosigned, doplus and dominus are recursive and won't inline, it
+-- pays to inline `readInt'`, because the body of the 'Chunker' can be
+-- inlined into the recursive functions, substantially improving the
+-- performance, e.g. when it is just 'Chunk' as in `readInt,` or when it
+-- is function to skip trailing whitespace after the input (leading
+-- whitespace in the tail) preparing the stream to read the next value.
+readInt' chunker = dosigned
+  where
+    done !n !s = pure $ Compose $ Just n  :> s
+    nada !s    = pure $ Compose $ Nothing :> s
+    {-# INLINE done #-}
+    {-# INLINE nada #-}
+
+    -- Optimise for the case where the desired integer is present, and
+    -- the first chunk is not empty or has just the sign, in which case
+    -- 'Char8.readInt' gives a result, and we're done if more data
+    -- remains in the chunk.  Otherwise, we have to deal with perhaps
+    -- just the sign in the buffer, and/or nothing left in the buffer
+    -- and the number might be continued in the next chunk.  Any
+    -- continuation must no longer start with a sign, and we must negate
+    -- any value returned before and after extending a negative number
+    -- with more digits.
+    --
+    dosigned bs = case bs of
+        Chunk c cs
+            | not $ B.null c -> do
+                let w = B.unsafeHead c
+                if | Just (!n, t) <- Char8.readInt c
+                     -> if | not (B.null t) -> done n (chunker t cs)
+                           | w /= 0x2d      -> doplus n cs
+                           | otherwise      -> dominus (-n) cs
+                   | B.length c == 1
+                     -> if | w == 0x2b     -> doplus 0 cs
+                           | w == 0x2d     -> dominus 0 cs
+                           | otherwise     -> nada bs
+                   | otherwise -> nada bs
+            | otherwise -> dosigned cs
+        Go m -> m >>= dosigned
+        e@(Empty _) -> nada e
+
+    -- Finish reading a positive value, given the value of its prefix.
+    -- For a 64-bit 'Int', only the last 64 digits matter.  Thus, if the
+    -- new chunk has more than 64-bytes of initial digits, we don't need
+    -- to combine the result with anything from the previous chunk.
+    --
+    -- But we still pay the cost of multiply by 10 and add for each
+    -- digit, and typically the number of digits is small, so testing
+    -- for long runs and using only the last 64 or so digits is likely
+    -- slower in in practice for anything but unreasonably long digit
+    -- sequences.  We just avoid paying the price again in the @10^l@
+    -- term, when @l@ is large enough for the result to be sure to be
+    -- zero modulo @2^N@ where @N@ is the number of bits in an 'Int'.
+    --
+    doplus !n str = case str of
+        Chunk c cs  | B.null c -> doplus n cs
+                    | B.unsafeHead c - 0x30 <= 9
+                    , Just (!i, t) <- Char8.readInt c
+                    , l <- B.length c - B.length t
+                    , m <- if n /= 0 && l < finiteBitSize n
+                           then n * 10^l + i
+                           else i
+                      -> if not (B.null t)
+                         then done m (chunker t cs)
+                         else doplus m cs
+                    | otherwise -> done n $ chunker c cs
+        Go m -> m >>= doplus n
+        Empty _ -> done n str
+
+    -- Finish reading a negative value, given the absolute value of its
+    -- prefix.
+    dominus !n str = case str of
+        Chunk c cs  | B.null c -> dominus n cs
+                    | B.unsafeHead c - 0x30 <= 9
+                    , Just (!i, t) <- Char8.readInt c
+                    , l <- B.length c - B.length t
+                    , m <- if n /= 0 && l < finiteBitSize n
+                           then n * 10^l + i
+                           else i
+                      -> if not (B.null t)
+                         then done (-m) (chunker t cs)
+                         else dominus m cs
+                    | otherwise -> done (-n) $ chunker c cs
+        Go m -> m >>= dominus n
+        Empty _ -> done (-n) str
