@@ -3,6 +3,7 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+
 -- |
 -- Module      : Data.ByteString.Streaming.Char8
 -- Copyright   : (c) Don Stewart 2006
@@ -180,7 +181,7 @@ import qualified Data.ByteString.Unsafe as B
 
 import           Streaming hiding (concats, distribute, unfold)
 import           Streaming.Internal (Stream(..))
-import qualified Streaming.Prelude as S
+import qualified Streaming.Prelude as SP
 
 import qualified Data.ByteString.Streaming as R
 import           Data.ByteString.Streaming.Internal
@@ -231,7 +232,7 @@ unpack bs = case bs of
 -- | /O(n)/ Convert a stream of separate characters into a packed byte stream.
 pack :: Monad m => Stream (Of Char) m r -> ByteString m r
 pack  = fromChunks
-        . mapped (fmap (\(str :> r) -> Char8.pack str :> r) . S.toList)
+        . mapped (fmap (\(str :> r) -> Char8.pack str :> r) . SP.toList)
         . chunksOf 32
 {-# INLINABLE pack #-}
 
@@ -273,7 +274,12 @@ head_ :: Monad m => ByteString m r -> m Char
 head_ = fmap w2c . R.head_
 {-# INLINE head_ #-}
 
--- | /O(1)/ Extract the first element of a ByteString, which may be non-empty
+-- | /O(1)/ Extract the first element of a ByteString, if possible. Suitable for
+-- use with `SP.mapped`:
+--
+-- @
+-- S.mapped Q.head :: Stream (Q.ByteString m) m r -> Stream (Of (Maybe Char)) m r
+-- @
 head :: Monad m => ByteString m r -> m (Of (Maybe Char) r)
 head = fmap (\(m:>r) -> fmap w2c m :> r) . R.head
 {-# INLINE head #-}
@@ -284,7 +290,12 @@ last_ :: Monad m => ByteString m r -> m Char
 last_ = fmap w2c . R.last_
 {-# INLINE last_ #-}
 
--- | Like `last_`, but suitable as an argument for `Streaming.mapped`.
+-- | Extract the last element of a `ByteString`, if possible. Suitable for use
+-- with `SP.mapped`:
+--
+-- @
+-- S.mapped Q.last :: Streaming (ByteString m) m r -> Stream (Of (Maybe Char)) m r
+-- @
 last :: Monad m => ByteString m r -> m (Of (Maybe Char) r)
 last = fmap (\(m:>r) -> fmap w2c m :> r) . R.last
 {-# INLINE last #-}
@@ -662,7 +673,12 @@ count_ :: Monad m => Char -> ByteString m r -> m Int
 count_ c = R.count_ (c2w c)
 {-# INLINE count_ #-}
 
--- | Like `count_`, but suitable for use with `Streaming.mapped`.
+-- | Returns the number of times its argument appears in the `ByteString`.
+-- Suitable for use with `SP.mapped`:
+--
+-- @
+-- S.mapped (Q.count 'a') :: Stream (Q.ByteString m) m r -> Stream (Of Int) m r
+-- @
 count :: Monad m => Char -> ByteString m r -> m (Of Int r)
 count c = R.count (c2w c)
 {-# INLINE count #-}

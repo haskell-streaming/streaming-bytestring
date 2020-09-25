@@ -370,6 +370,12 @@ toLazy bs0 = dematerialize bs0
 -- >>> S.print $ mapped R.null $ Q.lines "yours,\nMeredith"
 -- False
 -- False
+--
+-- Suitable for use with `SP.mapped`:
+--
+-- @
+-- S.mapped Q.null :: Streaming (ByteString m) m r -> Stream (Of Bool) m r
+-- @
 null :: Monad m => ByteString m r -> m (Of Bool r)
 null (Empty r)  = return (True :> r)
 null (Go m)     = m >>= null
@@ -505,6 +511,11 @@ head_ (Go m)      = m >>= head_
 {-# INLINABLE head_ #-}
 
 -- | /O(c)/ Extract the first element of a 'ByteString', if there is one.
+-- Suitable for use with `SP.mapped`:
+--
+-- @
+-- S.mapped Q.head :: Stream (Q.ByteString m) m r -> Stream (Of (Maybe Word8)) m r
+-- @
 head :: Monad m => ByteString m r -> m (Of (Maybe Word8) r)
 head (Empty r)  = return (Nothing :> r)
 head (Chunk c rest) = case B.uncons c of
@@ -573,7 +584,12 @@ last_ (Chunk c0 cs0) = go c0 cs0
    go x (Go m)       = m >>= go x
 {-# INLINABLE last_ #-}
 
--- | Like `last_`, but suitable as an argument for `Streaming.mapped`.
+-- | Extract the last element of a `ByteString`, if possible. Suitable for use
+-- with `SP.mapped`:
+--
+-- @
+-- S.mapped Q.last :: Streaming (ByteString m) m r -> Stream (Of (Maybe Word8)) m r
+-- @
 last :: Monad m => ByteString m r -> m (Of (Maybe Word8) r)
 last (Empty r)      = return (Nothing :> r)
 last (Go m)         = m >>= last
@@ -1011,7 +1027,12 @@ count_ :: Monad m => Word8 -> ByteString m r -> m Int
 count_ w  = fmap (\(n :> _) -> n) . foldlChunks (\n c -> n + fromIntegral (B.count w c)) 0
 {-# INLINE count_ #-}
 
--- | Like `count_`, but suitable for use with `Streaming.mapped`.
+-- | Returns the number of times its argument appears in the `ByteString`.
+-- Suitable for use with `SP.mapped`:
+--
+-- @
+-- S.mapped (Q.count 37) :: Stream (Q.ByteString m) m r -> Stream (Of Int) m r
+-- @
 count :: Monad m => Word8 -> ByteString m r -> m (Of Int r)
 count w cs = foldlChunks (\n c -> n + fromIntegral (B.count w c)) 0 cs
 {-# INLINE count #-}
