@@ -102,6 +102,18 @@ goodFindIndex = do
   assertBool "Expected the length of the string" $ QI.findIndexOrEnd (const False) "1234" == 4
   assertBool "Expected 0" $ QI.findIndexOrEnd (const True) "1234" == 0
 
+firstI :: Assertion
+firstI = do
+  l <- runResourceT
+    . S.length_                        -- IO Int
+    . S.filter (== 'i')
+    . S.concat                         -- Stream (Of Char) IO ()
+    . S.mapped Q8.head                 -- Stream (Of (Maybe Char)) IO ()
+    . Q8.denull                        -- Stream (ByteString IO) IO ()
+    . Q8.lines                         -- Stream (Bytestring IO) IO ()
+    $ Q8.readFile "tests/groupBy.txt"  -- ByteString IO ()
+  l @?= 57
+
 main :: IO ()
 main = defaultMain $ testGroup "Tests"
   [ testGroup "Property Tests"
@@ -135,5 +147,6 @@ main = defaultMain $ testGroup "Tests"
     , testCase "group: Char order" groupCharOrder
     , testCase "groupBy: Char order" groupByCharOrder
     , testCase "findIndexOrEnd" goodFindIndex
+    , testCase "Stream Interop" firstI
     ]
   ]

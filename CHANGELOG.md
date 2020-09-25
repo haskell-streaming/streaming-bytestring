@@ -4,6 +4,7 @@
 
 - An order-of-magnitude performance improvement in line splitting, thanks to
   Viktor Dukhovni. [#18]
+- Documentation improved, and docstring coverage is now 100%. [#27]
 
 #### Fixed
 
@@ -16,6 +17,7 @@
 [#18]: https://github.com/haskell-streaming/streaming-bytestring/pull/18
 [#22]: https://github.com/haskell-streaming/streaming-bytestring/pull/22
 [#4]: https://github.com/haskell-streaming/streaming-bytestring/issues/4
+[#27]: https://github.com/haskell-streaming/streaming-bytestring/pull/27
 
 ## 0.1.6
 
