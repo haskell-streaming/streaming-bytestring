@@ -43,7 +43,6 @@ module Data.ByteString.Streaming.Char8 (
     , drained
     , mwrap
 
-
     -- * Transforming ByteStrings
     , map              -- map :: Monad m => (Char -> Char) -> ByteString m r -> ByteString m r
     , intercalate      -- intercalate :: Monad m => ByteString m () -> Stream (ByteString m) m r -> ByteString m r
@@ -541,13 +540,14 @@ unlines = loop where
 {-# INLINABLE unlines #-}
 
 -- | 'words' breaks a byte stream up into a succession of byte streams
--- corresponding to words, breaking on 'Char's representing white space. This is the
--- genuinely streaming 'words'. A function that returns individual strict
+-- corresponding to words, breaking on 'Char's representing white space. This is
+-- the genuinely streaming 'words'. A function that returns individual strict
 -- bytestrings would concatenate even infinitely long words like @cycle "y"@ in
--- memory. When the stream is known to not contain unreasonably long words, you can write
-`mapped toStrict . words` or the like, if strict bytestrings are needed.
+-- memory. When the stream is known to not contain unreasonably long words, you
+-- can write @mapped toStrict . words@ or the like, if strict bytestrings are
+-- needed.
 words :: Monad m => ByteString m r -> Stream (ByteString m) m r
-words =  filtered . R.splitWith B.isSpaceWord8
+words = filtered . R.splitWith B.isSpaceWord8
  where
   filtered stream = case stream of
     Return r -> Return r
