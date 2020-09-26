@@ -757,7 +757,7 @@ readInt = readInt' Chunk
 -- @t@ is the rest of the input streaming 'ByteString' computed by
 -- applying the provided 'Chunker' function to the first non-empty chunk
 -- following the parsed number and the rest of the stream.  The function
--- is not called, and the stream is returned as-is, preceding by
+-- is not called, and the stream is returned as-is, preceded by
 -- 'Nothing' for the ('Maybe' 'Int') result, when no number is found at
 -- the start of the stream.
 --
@@ -771,10 +771,10 @@ readInt = readInt' Chunk
 -- If the stream of digits decodes to a value larger than can be
 -- represented by an 'Int', the result will overflow, and will not match
 -- the input digits.  Input is consumed until no more digits remain.  If
--- the stream is an unbound run of decimal digits, this function may
+-- the stream is an unbounded run of decimal digits, this function may
 -- never return.  If that's a concern, you can split the stream into an
--- initial segment with an apporpriate maximum length and a tail, and
--- apply 'readInt' to just the initial segment.
+-- initial segment with an appropriate maximum length and a tail, and
+-- apply `readInt'` to just the initial segment.
 --
 readInt' :: Monad m
          => Chunker m r    -- ^ 'Chunker' function for the tail of the stream
@@ -785,7 +785,7 @@ readInt' :: Monad m
 -- pays to inline `readInt'`, because the body of the 'Chunker' can be
 -- inlined into the recursive functions, substantially improving the
 -- performance, e.g. when it is just 'Chunk' as in `readInt,` or when it
--- is function to skip trailing whitespace after the input (leading
+-- is a function to skip trailing whitespace after the input (leading
 -- whitespace in the tail) preparing the stream to read the next value.
 readInt' chunker = dosigned
   where
@@ -795,8 +795,8 @@ readInt' chunker = dosigned
     {-# INLINE nada #-}
 
     -- Optimise for the case where the desired integer is present, and
-    -- the first chunk is not empty or has just the sign, in which case
-    -- 'Char8.readInt' gives a result, and we're done if more data
+    -- the first chunk is neither empty nor has just the sign, in which
+    -- case 'Char8.readInt' gives a result, and we're done if more data
     -- remains in the chunk.  Otherwise, we have to deal with perhaps
     -- just the sign in the buffer, and/or nothing left in the buffer
     -- and the number might be continued in the next chunk.  Any
@@ -823,13 +823,13 @@ readInt' chunker = dosigned
 
     -- Finish reading a positive value, given the value of its prefix.
     -- For a 64-bit 'Int', only the last 64 digits matter.  Thus, if the
-    -- new chunk has more than 64-bytes of initial digits, we don't need
-    -- to combine the result with anything from the previous chunk.
+    -- new chunk has more than 64 digits, we don't need to combine the
+    -- result with anything from the previous chunk.
     --
     -- But we still pay the cost of multiply by 10 and add for each
     -- digit, and typically the number of digits is small, so testing
     -- for long runs and using only the last 64 or so digits is likely
-    -- slower in in practice for anything but unreasonably long digit
+    -- slower in practice for anything but unreasonably long digit
     -- sequences.  We just avoid paying the price again in the @10^l@
     -- term, when @l@ is large enough for the result to be sure to be
     -- zero modulo @2^N@ where @N@ is the number of bits in an 'Int'.
