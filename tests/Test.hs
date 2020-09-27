@@ -12,6 +12,7 @@ import qualified Data.ByteString.Streaming.Internal as QI
 import           Data.Function (on)
 import           Data.Functor.Compose (Compose(..))
 import           Data.Functor.Identity
+import qualified Data.IORef as IOR
 import qualified Data.List as L
 import           Data.String (fromString)
 import qualified Streaming as SM
@@ -119,133 +120,176 @@ firstI = do
 
 readIntCases :: Assertion
 readIntCases = do
-  ( Q8.readInt
-    $ QI.Chunk "123"
-    $ QI.Empty () ) >>= pure . getCompose >>= \case
-    Just 123 :> bs -> Q.null_ bs >>= assertBool "Empty readInt1 tail"
-    _              -> assertBool "Correct readInt1 value" False
+  cnt <- IOR.newIORef 1 -- number of effects in stream.
+  res <- Q8.readInt
+         $ QI.Chunk "123"
+         $ addEffect cnt
+         $ QI.Empty 1
+  check cnt res (Just 123) ("" :> 1)
   --
-  ( Q8.readInt
-    $ QI.Chunk "123"
-    $ QI.Chunk "456"
-    $ QI.Empty () ) >>= pure . getCompose >>= \case
-    Just 123456 :> bs -> Q.null_ bs >>= assertBool "Empty readInt2 tail"
-    _                 -> assertBool "Correct readInt2 value" False
+  IOR.writeIORef cnt 2
+  res <- Q8.readInt
+         $ QI.Chunk "123"
+         $ addEffect cnt
+         $ QI.Chunk "456"
+         $ addEffect cnt
+         $ QI.Empty 2
+  check cnt res (Just 123456) ("" :> 2)
   --
-  ( Q8.readInt
-    $ QI.Chunk "-123"
-    $ QI.Chunk "456"
-    $ QI.Empty () ) >>= pure . getCompose >>= \case
-    Just (-123456) :> bs -> Q.null_ bs >>= assertBool "Empty readInt3 tail"
-    _                    -> assertBool "Correct readInt3 value" False
+  IOR.writeIORef cnt 2
+  res <- Q8.readInt
+       $ QI.Chunk "-123"
+       $ addEffect cnt
+       $ QI.Chunk "456"
+       $ addEffect cnt
+       $ QI.Empty 3
+  check cnt res (Just (-123456)) ("" :> 3)
   --
-  ( Q8.readInt
-    $ QI.Chunk "-123"
-    $ QI.Chunk "456"
-    $ QI.Chunk "789"
-    $ QI.Chunk "-42"
-    $ QI.Empty () ) >>= pure . getCompose >>= \case
-    Just (-123456789) :> bs -> Q.toStrict_ bs >>=
-                               assertBool "Correct readInt4 tail" . (== "-42")
-    _                       -> assertBool "Correct readInt4 value" False
+  IOR.writeIORef cnt 4
+  res <- Q8.readInt
+       $ QI.Chunk "-123"
+       $ addEffect cnt
+       $ QI.Chunk "456"
+       $ addEffect cnt
+       $ QI.Chunk "789"
+       $ addEffect cnt
+       $ QI.Chunk "-42"
+       $ addEffect cnt
+       $ QI.Empty 4
+  check cnt res (Just (-123456789)) ("-42" :> 4)
   --
-  ( Q8.readInt
-    $ QI.Chunk "-123"
-    $ QI.Go $ pure
-    $ QI.Chunk "456789123456789123456789123456789"
-    $ QI.Chunk "+42"
-    $ QI.Empty () ) >>= pure . getCompose >>= \case
-    Just n :> bs -> do
-                    let m = -123456789123456789123456789123456789 :: Integer
-                        i = fromIntegral m
-                    assertBool "Correct readInt5 value" $ n == i
-                    Q.toStrict_ bs >>=
-                        assertBool "Correct readInt5 tail" . (== "+42")
+  IOR.writeIORef cnt 3
+  res <- Q8.readInt
+       $ QI.Chunk "-123"
+       $ addEffect cnt
+       $ QI.Chunk "456789123456789123456789123456789"
+       $ addEffect cnt
+       $ QI.Chunk "+42"
+       $ addEffect cnt
+       $ QI.Empty 5
+  let m = -123456789123456789123456789123456789 :: Integer
+  check cnt res (Just $ fromIntegral m) ("+42" :> 5)
   --
-  ( Q8.readInt' ((Q8.dropWhile (== ' ') .) . QI.Chunk)
-    $ QI.Chunk "+123"
-    $ QI.Go $ pure
-    $ QI.Chunk "456789"
-    $ QI.Chunk "123456789"
-    $ QI.Go $ pure
-    $ QI.Chunk "123456789"
-    $ QI.Go $ pure
-    $ QI.Go $ pure
-    $ QI.Chunk "123456789 foo"
-    $ QI.Empty () ) >>= pure . getCompose >>= \case
-    Just n :> bs -> do
-                    let m = 123456789123456789123456789123456789 :: Integer
-                        i = fromIntegral m
-                    assertBool "Correct readInt6' value" $ n == i
-                    Q.toStrict_ bs >>=
-                        assertBool "Correct readInt6' tail" . (== "foo")
+  IOR.writeIORef cnt 5
+  res <- Q8.readInt' ((Q8.dropWhile (== ' ') .) . QI.Chunk)
+       $ QI.Chunk "+"
+       $ addEffect cnt
+       $ QI.Chunk "123"
+       $ QI.Chunk "456789"
+       $ addEffect cnt
+       $ addEffect cnt
+       $ QI.Chunk "123456789"
+       $ addEffect cnt
+       $ QI.Chunk "123456789"
+       $ QI.Chunk "123456789 foo"
+       $ addEffect cnt
+       $ QI.Empty 6
+  let m = 123456789123456789123456789123456789 :: Integer
+  check cnt res (Just $ fromIntegral m) ("foo" :> 6)
   --
-  ( Q8.readInt' ((Q8.dropWhile (== ' ') .) . QI.Chunk)
-    $ QI.Chunk "-123"
-    $ QI.Go $ pure
-    $ QI.Chunk "456789"
-    $ QI.Chunk "123456789"
-    $ QI.Go $ pure
-    $ QI.Chunk "123456789"
-    $ QI.Chunk "123456789 "
-    $ QI.Chunk "          "
-    $ QI.Chunk "          "
-    $ QI.Chunk "       -42"
-    $ QI.Empty () ) >>= pure . getCompose >>= \case
-    Just n :> bs -> do
-                    let m = -123456789123456789123456789123456789 :: Integer
-                        i = fromIntegral m
-                    assertBool "Correct readInt7' value" $ n == i
-                    Q.toStrict_ bs >>=
-                        assertBool "Correct readInt7' tail" . (== "-42")
+  IOR.writeIORef cnt 5
+  res <- Q8.readInt' ((Q8.dropWhile (== ' ') .) . QI.Chunk)
+       $ QI.Chunk "-"
+       $ addEffect cnt
+       $ QI.Chunk "123"
+       $ addEffect cnt
+       $ QI.Chunk "456789"
+       $ QI.Chunk "123456789"
+       $ addEffect cnt
+       $ QI.Chunk "123456789"
+       $ QI.Chunk "123456789 "
+       $ QI.Chunk "          "
+       $ QI.Chunk "          "
+       $ addEffect cnt
+       $ QI.Chunk "-42"
+       $ addEffect cnt
+       $ QI.Empty 7
+  let m = -123456789123456789123456789123456789 :: Integer
+  check cnt res (Just $ fromIntegral m) ("-42" :> 7)
   --
-  ( Q8.readInt' ((Q8.dropWhile (== ' ') .) . QI.Chunk)
-    $ QI.Chunk "-123"
-    $ QI.Go $ pure
-    $ QI.Chunk "456789"
-    $ QI.Chunk "123456789"
-    $ QI.Go $ pure
-    $ QI.Chunk "123456789"
-    $ QI.Chunk "123456789 "
-    $ QI.Chunk "          "
-    $ QI.Chunk "          "
-    $ QI.Chunk "          "
-    $ QI.Empty 42 ) >>= pure . getCompose >>= \case
-    Just n :> bs -> do
-                    let m = -123456789123456789123456789123456789 :: Integer
-                        i = fromIntegral m
-                    assertBool "Correct readInt8' value" $ n == i
-                    Q.toStrict bs >>= assertBool "Correct readInt8' tail" . (== ("" :> (42 :: Int)))
+  IOR.writeIORef cnt 1
+  res <- Q8.readInt' ((Q8.dropWhile (== ' ') .) . QI.Chunk)
+       $ QI.Chunk "-123"
+       $ QI.Chunk "456789"
+       $ QI.Chunk "123456789"
+       $ QI.Chunk "123456789"
+       $ QI.Chunk "123456789 "
+       $ QI.Chunk "          "
+       $ QI.Chunk "          "
+       $ QI.Chunk "          "
+       $ addEffect cnt
+       $ QI.Empty 8
+  let m = -123456789123456789123456789123456789 :: Integer
+  check cnt res (Just $ fromIntegral m) ("" :> 8)
   --
-  ( Q8.readInt' ((Q8.dropWhile (== ' ') .) . QI.Chunk)
-    $ QI.Chunk "-123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
-    $ QI.Empty 42 ) >>= pure . getCompose >>= \case
-    Just n :> bs -> do
-                    -- The last 128 digits are "surely" enough.  (This test will break if
-                    -- Haskell some day ends up with 256-bit 'Int's.
-                    let m = -91234567891234567891234567891234567891234567891234567890123456789123456789123456789123456789123456789123456789123456789123456789 :: Integer
-                        i = fromIntegral m
-                    assertBool "Correct readInt9' value" $ n == i
-                    Q.toStrict bs >>= assertBool "Correct readInt9' tail" . (== ("" :> (42 :: Int)))
+  IOR.writeIORef cnt 2
+  res <- Q8.readInt' ((Q8.dropWhile (== ' ') .) . QI.Chunk)
+       $ QI.Chunk "-123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ addEffect cnt
+       $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ QI.Chunk "0123456789123456789123456789123456789123456789123456789123456789123456789"
+       $ addEffect cnt
+       $ QI.Empty 9
+  -- The last 128 digits are "surely" enough.  (This test will break if
+  -- Haskell some day ends up with 256-bit 'Int's.
+  let m = -91234567891234567891234567891234567891234567891234567890123456789123456789123456789123456789123456789123456789123456789123456789 :: Integer
+  check cnt res (Just $ fromIntegral m) ("" :> 9)
+  --
+  IOR.writeIORef cnt 1
+  res <- Q8.readInt' ((Q8.dropWhile (== ' ') .) . QI.Chunk)
+       $ QI.Chunk "+"
+       $ addEffect cnt
+       $ QI.Chunk "foo"
+       $ QI.Empty 10
+  check cnt res Nothing ("+foo" :> 10)
+  --
+  IOR.writeIORef cnt 1
+  res <- Q8.readInt' ((Q8.dropWhile (== ' ') .) . QI.Chunk)
+       $ QI.Chunk "-"
+       $ addEffect cnt
+       $ QI.Chunk " bar"
+       $ QI.Empty 11
+  check cnt res Nothing ("- bar" :> 11)
+  --
+  IOR.writeIORef cnt 1
+  let msg = "  nothing to see here move along  "
+  res <- Q8.readInt' ((Q8.dropWhile (== ' ') .) . QI.Chunk)
+       $ QI.Chunk msg
+       $ addEffect cnt
+       $ QI.Empty 12
+  check cnt res Nothing (msg :> 12)
+  where
+    -- Count down to zero from initial value
+    addEffect cnt str = QI.Go $ const str <$> IOR.modifyIORef' cnt pred
+    check :: IOR.IORef Int
+          -> Compose (Of (Maybe Int)) (QI.ByteString IO) Int
+          -> Maybe Int
+          -> Of B.ByteString Int
+          -> Assertion
+    check cnt (Compose (gotInt :> str)) wantInt (wantStr :> wantR ) = do
+        ( gotStr :> gotR ) <- Q.toStrict str
+        c <- IOR.readIORef cnt
+        assertBool ("Correct readInt effects " ++ show wantR) $ c == 0
+        assertBool ("Correct readInt value " ++ show wantR) $ gotInt == wantInt
+        assertBool ("Correct readInt tail " ++ show wantR) $ gotStr == wantStr
+        assertBool ("Correct readInt residue " ++ show wantR) $ gotR == wantR
 
 main :: IO ()
 main = defaultMain $ testGroup "Tests"

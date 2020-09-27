@@ -813,13 +813,28 @@ readInt' chunker = dosigned
                            | w /= 0x2d      -> doplus n cs
                            | otherwise      -> dominus (-n) cs
                    | B.length c == 1
-                     -> if | w == 0x2b     -> doplus 0 cs
-                           | w == 0x2d     -> dominus 0 cs
+                     -> if | w == 0x2b     -> doabs c doplus cs
+                           | w == 0x2d     -> doabs c dominus cs
                            | otherwise     -> nada bs
                    | otherwise -> nada bs
             | otherwise -> dosigned cs
         Go m -> m >>= dosigned
         e@(Empty _) -> nada e
+      where
+        -- When the initiall input has a chunk boundary immediately
+        -- after a @+@ or @-@ sign, we need to peek at the next chunk to
+        -- determine whether it starts with a digit.  Peeking at the
+        -- next chunk may involve an effect which must not be repeated.
+        -- Therefore, when the next chunk does not start with a digit,
+        -- and we want return 'Nothing' with the original bytestream, we
+        -- MUST reconstitute the stream from the 1-byte chunk with the
+        -- sign, and the subsequent chunk with the next byte, which is
+        -- often a result of an intermediate effect!
+        doabs signBS k str = case str of
+            Go m -> m >>= doabs signBS k
+            Chunk c cs | B.null c -> doabs signBS k cs
+                       | B.unsafeHead c - 0x30 <= 9 -> k 0 str
+            _ -> nada (Chunk signBS str)
 
     -- Finish reading a positive value, given the value of its prefix.
     -- For a 64-bit 'Int', only the last 64 digits matter.  Thus, if the
