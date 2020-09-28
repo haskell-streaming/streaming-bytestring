@@ -18,6 +18,7 @@
 
 module Data.ByteString.Streaming.Internal
   ( ByteStream(..)
+  , ByteString
   , consChunk         -- :: ByteString -> ByteStream m r -> ByteStream m r
   , chunkOverhead     -- :: Int
   , defaultChunkSize  -- :: Int
@@ -91,6 +92,10 @@ import           System.IO.Unsafe
 import           Control.Monad.Base
 import           Control.Monad.Catch (MonadCatch(..))
 import           Control.Monad.Trans.Resource
+
+-- | A type alias for back-compatibility.
+type ByteString = ByteStream
+{-# DEPRECATED ByteString "Use ByteStream instead." #-}
 
 -- | A space-efficient representation of a succession of 'Word8' vectors,
 -- supporting many efficient operations.

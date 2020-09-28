@@ -19,149 +19,147 @@
 -- with @http-client@, @attoparsec@, @aeson@, @zlib@ etc. can be found in the
 -- 'streaming-utils' library.
 
-module Data.ByteString.Streaming.Char8 (
-    -- * The @ByteStream@ type
+module Data.ByteString.Streaming.Char8
+  ( -- * The @ByteStream@ type
     ByteStream
+  , ByteString
 
     -- * Introducing and eliminating 'ByteStream's
-    , empty            -- empty :: ByteStream m ()
-    , pack             -- pack :: Monad m => String -> ByteStream m ()
-    , unpack
-    , string
-    , unlines
-    , unwords
-    , singleton        -- singleton :: Monad m => Char -> ByteStream m ()
-    , fromChunks       -- fromChunks :: Monad m => Stream (Of ByteString) m r -> ByteStream m r
-    , fromLazy         -- fromLazy :: Monad m => ByteString -> ByteStream m ()
-    , fromStrict       -- fromStrict :: ByteString -> ByteStream m ()
-    , toChunks         -- toChunks :: Monad m => ByteStream m r -> Stream (Of ByteString) m r
-    , toLazy           -- toLazy :: Monad m => ByteStream m () -> m ByteString
-    , toLazy_
-    , toStrict         -- toStrict :: Monad m => ByteStream m () -> m ByteString
-    , toStrict_
-    , effects
-    , copy
-    , drained
-    , mwrap
+  , empty            -- empty :: ByteStream m ()
+  , pack             -- pack :: Monad m => String -> ByteStream m ()
+  , unpack
+  , string
+  , unlines
+  , unwords
+  , singleton        -- singleton :: Monad m => Char -> ByteStream m ()
+  , fromChunks       -- fromChunks :: Monad m => Stream (Of ByteString) m r -> ByteStream m r
+  , fromLazy         -- fromLazy :: Monad m => ByteString -> ByteStream m ()
+  , fromStrict       -- fromStrict :: ByteString -> ByteStream m ()
+  , toChunks         -- toChunks :: Monad m => ByteStream m r -> Stream (Of ByteString) m r
+  , toLazy           -- toLazy :: Monad m => ByteStream m () -> m ByteString
+  , toLazy_
+  , toStrict         -- toStrict :: Monad m => ByteStream m () -> m ByteString
+  , toStrict_
+  , effects
+  , copy
+  , drained
+  , mwrap
 
     -- * Transforming ByteStreams
-    , map              -- map :: Monad m => (Char -> Char) -> ByteStream m r -> ByteStream m r
-    , intercalate      -- intercalate :: Monad m => ByteStream m () -> Stream (ByteStream m) m r -> ByteStream m r
-    , intersperse      -- intersperse :: Monad m => Char -> ByteStream m r -> ByteStream m r
+  , map              -- map :: Monad m => (Char -> Char) -> ByteStream m r -> ByteStream m r
+  , intercalate      -- intercalate :: Monad m => ByteStream m () -> Stream (ByteStream m) m r -> ByteStream m r
+  , intersperse      -- intersperse :: Monad m => Char -> ByteStream m r -> ByteStream m r
 
     -- * Basic interface
-    , cons             -- cons :: Monad m => Char -> ByteStream m r -> ByteStream m r
-    , cons'            -- cons' :: Char -> ByteStream m r -> ByteStream m r
-    , snoc
-    , append           -- append :: Monad m => ByteStream m r -> ByteStream m s -> ByteStream m s
-    , filter           -- filter :: (Char -> Bool) -> ByteStream m r -> ByteStream m r
-    , head             -- head :: Monad m => ByteStream m r -> m Char
-    , head_            -- head' :: Monad m => ByteStream m r -> m (Of Char r)
-    , last             -- last :: Monad m => ByteStream m r -> m Char
-    , last_            -- last' :: Monad m => ByteStream m r -> m (Of Char r)
-    , null             -- null :: Monad m => ByteStream m r -> m Bool
-    , null_
-    , testNull
-    , nulls            -- null' :: Monad m => ByteStream m r -> m (Of Bool r)
-    , uncons           -- uncons :: Monad m => ByteStream m r -> m (Either r (Char, ByteStream m r))
-    , nextChar
+  , cons             -- cons :: Monad m => Char -> ByteStream m r -> ByteStream m r
+  , cons'            -- cons' :: Char -> ByteStream m r -> ByteStream m r
+  , snoc
+  , append           -- append :: Monad m => ByteStream m r -> ByteStream m s -> ByteStream m s
+  , filter           -- filter :: (Char -> Bool) -> ByteStream m r -> ByteStream m r
+  , head             -- head :: Monad m => ByteStream m r -> m Char
+  , head_            -- head' :: Monad m => ByteStream m r -> m (Of Char r)
+  , last             -- last :: Monad m => ByteStream m r -> m Char
+  , last_            -- last' :: Monad m => ByteStream m r -> m (Of Char r)
+  , null             -- null :: Monad m => ByteStream m r -> m Bool
+  , null_
+  , testNull
+  , nulls            -- null' :: Monad m => ByteStream m r -> m (Of Bool r)
+  , uncons           -- uncons :: Monad m => ByteStream m r -> m (Either r (Char, ByteStream m r))
+  , nextChar
 
     -- * Substrings
-
     -- ** Breaking strings
-    , break            -- break :: Monad m => (Char -> Bool) -> ByteStream m r -> ByteStream m (ByteStream m r)
-    , drop             -- drop :: Monad m => GHC.Int.Int64 -> ByteStream m r -> ByteStream m r
-    , dropWhile
-    , group            -- group :: Monad m => ByteStream m r -> Stream (ByteStream m) m r
-    , groupBy
-    , span             -- span :: Monad m => (Char -> Bool) -> ByteStream m r -> ByteStream m (ByteStream m r)
-    , splitAt          -- splitAt :: Monad m => GHC.Int.Int64 -> ByteStream m r -> ByteStream m (ByteStream m r)
-    , splitWith        -- splitWith :: Monad m => (Char -> Bool) -> ByteStream m r -> Stream (ByteStream m) m r
-    , take             -- take :: Monad m => GHC.Int.Int64 -> ByteStream m r -> ByteStream m ()
-    , takeWhile        -- takeWhile :: (Char -> Bool) -> ByteStream m r -> ByteStream m ()
+  , break            -- break :: Monad m => (Char -> Bool) -> ByteStream m r -> ByteStream m (ByteStream m r)
+  , drop             -- drop :: Monad m => GHC.Int.Int64 -> ByteStream m r -> ByteStream m r
+  , dropWhile
+  , group            -- group :: Monad m => ByteStream m r -> Stream (ByteStream m) m r
+  , groupBy
+  , span             -- span :: Monad m => (Char -> Bool) -> ByteStream m r -> ByteStream m (ByteStream m r)
+  , splitAt          -- splitAt :: Monad m => GHC.Int.Int64 -> ByteStream m r -> ByteStream m (ByteStream m r)
+  , splitWith        -- splitWith :: Monad m => (Char -> Bool) -> ByteStream m r -> Stream (ByteStream m) m r
+  , take             -- take :: Monad m => GHC.Int.Int64 -> ByteStream m r -> ByteStream m ()
+  , takeWhile        -- takeWhile :: (Char -> Bool) -> ByteStream m r -> ByteStream m ()
 
     -- ** Breaking into many substrings
-    , split            -- split :: Monad m => Char -> ByteStream m r -> Stream (ByteStream m) m r
-    , lines
-    , words
-    , lineSplit
-    , denull
+  , split            -- split :: Monad m => Char -> ByteStream m r -> Stream (ByteStream m) m r
+  , lines
+  , words
+  , lineSplit
+  , denull
 
     -- ** Special folds
-    , concat          -- concat :: Monad m => Stream (ByteStream m) m r -> ByteStream m r
+  , concat          -- concat :: Monad m => Stream (ByteStream m) m r -> ByteStream m r
 
     -- * Builders
-
-    , toStreamingByteString
-    , toStreamingByteStringWith
-    , toBuilder
-    , concatBuilders
+  , toStreamingByteString
+  , toStreamingByteStringWith
+  , toBuilder
+  , concatBuilders
 
     -- * Building ByteStreams
-
     -- ** Infinite ByteStreams
-    , repeat           -- repeat :: Char -> ByteStream m ()
-    , iterate          -- iterate :: (Char -> Char) -> Char -> ByteStream m ()
-    , cycle            -- cycle :: Monad m => ByteStream m r -> ByteStream m s
+  , repeat           -- repeat :: Char -> ByteStream m ()
+  , iterate          -- iterate :: (Char -> Char) -> Char -> ByteStream m ()
+  , cycle            -- cycle :: Monad m => ByteStream m r -> ByteStream m s
 
     -- ** Unfolding ByteStreams
-    , unfoldr          -- unfoldr :: (a -> Maybe (Char, a)) -> a -> ByteStream m ()
-    , unfoldM          -- unfold  :: (a -> Either r (Char, a)) -> a -> ByteStream m r
-    , reread
+  , unfoldr          -- unfoldr :: (a -> Maybe (Char, a)) -> a -> ByteStream m ()
+  , unfoldM          -- unfold  :: (a -> Either r (Char, a)) -> a -> ByteStream m r
+  , reread
 
     -- *  Folds, including support for `Control.Foldl`
 --    , foldr            -- foldr :: Monad m => (Char -> a -> a) -> a -> ByteStream m () -> m a
-    , fold             -- fold :: Monad m => (x -> Char -> x) -> x -> (x -> b) -> ByteStream m () -> m b
-    , fold_            -- fold' :: Monad m => (x -> Char -> x) -> x -> (x -> b) -> ByteStream m r -> m (b, r)
-    , length
-    , length_
-    , count
-    , count_
-    , readInt
-    -- * I\/O with 'ByteStream's
+  , fold             -- fold :: Monad m => (x -> Char -> x) -> x -> (x -> b) -> ByteStream m () -> m b
+  , fold_            -- fold' :: Monad m => (x -> Char -> x) -> x -> (x -> b) -> ByteStream m r -> m (b, r)
+  , length
+  , length_
+  , count
+  , count_
+  , readInt
 
+    -- * I\/O with 'ByteStream's
     -- ** Standard input and output
-    , getContents      -- getContents :: ByteStream IO ()
-    , stdin            -- stdin :: ByteStream IO ()
-    , stdout           -- stdout :: ByteStream IO r -> IO r
-    , interact         -- interact :: (ByteStream IO () -> ByteStream IO r) -> IO r
-    , putStr
-    , putStrLn
+  , getContents      -- getContents :: ByteStream IO ()
+  , stdin            -- stdin :: ByteStream IO ()
+  , stdout           -- stdout :: ByteStream IO r -> IO r
+  , interact         -- interact :: (ByteStream IO () -> ByteStream IO r) -> IO r
+  , putStr
+  , putStrLn
 
     -- ** Files
-    , readFile         -- readFile :: FilePath -> ByteStream IO ()
-    , writeFile        -- writeFile :: FilePath -> ByteStream IO r -> IO r
-    , appendFile       -- appendFile :: FilePath -> ByteStream IO r -> IO r
+  , readFile         -- readFile :: FilePath -> ByteStream IO ()
+  , writeFile        -- writeFile :: FilePath -> ByteStream IO r -> IO r
+  , appendFile       -- appendFile :: FilePath -> ByteStream IO r -> IO r
 
     -- ** I\/O with Handles
-    , fromHandle       -- fromHandle :: Handle -> ByteStream IO ()
-    , toHandle         -- toHandle :: Handle -> ByteStream IO r -> IO r
-    , hGet             -- hGet :: Handle -> Int -> ByteStream IO ()
-    , hGetContents     -- hGetContents :: Handle -> ByteStream IO ()
-    , hGetContentsN    -- hGetContentsN :: Int -> Handle -> ByteStream IO ()
-    , hGetN            -- hGetN :: Int -> Handle -> Int -> ByteStream IO ()
-    , hGetNonBlocking  -- hGetNonBlocking :: Handle -> Int -> ByteStream IO ()
-    , hGetNonBlockingN -- hGetNonBlockingN :: Int -> Handle -> Int -> ByteStream IO ()
-    , hPut             -- hPut :: Handle -> ByteStream IO r -> IO r
+  , fromHandle       -- fromHandle :: Handle -> ByteStream IO ()
+  , toHandle         -- toHandle :: Handle -> ByteStream IO r -> IO r
+  , hGet             -- hGet :: Handle -> Int -> ByteStream IO ()
+  , hGetContents     -- hGetContents :: Handle -> ByteStream IO ()
+  , hGetContentsN    -- hGetContentsN :: Int -> Handle -> ByteStream IO ()
+  , hGetN            -- hGetN :: Int -> Handle -> Int -> ByteStream IO ()
+  , hGetNonBlocking  -- hGetNonBlocking :: Handle -> Int -> ByteStream IO ()
+  , hGetNonBlockingN -- hGetNonBlockingN :: Int -> Handle -> Int -> ByteStream IO ()
+  , hPut             -- hPut :: Handle -> ByteStream IO r -> IO r
 --    , hPutNonBlocking  -- hPutNonBlocking :: Handle -> ByteStream IO r -> ByteStream IO r
 
     -- * Simple chunkwise operations
-    , unconsChunk
-    , nextChunk
-    , chunk
-    , foldrChunks
-    , foldlChunks
-    , chunkFold
-    , chunkFoldM
-    , chunkMap
-    , chunkMapM
-    , chunkMapM_
+  , unconsChunk
+  , nextChunk
+  , chunk
+  , foldrChunks
+  , foldlChunks
+  , chunkFold
+  , chunkFoldM
+  , chunkMap
+  , chunkMapM
+  , chunkMapM_
 
     -- * Etc.
 --    , zipWithStream    -- zipWithStream :: Monad m => (forall x. a -> ByteStream m x -> ByteStream m x) -> [a] -> Stream (ByteStream m) m r -> Stream (ByteStream m) m r
-    , distribute      -- distribute :: ByteStream (t m) a -> t (ByteStream m) a
-    , materialize
-    , dematerialize
+  , distribute      -- distribute :: ByteStream (t m) a -> t (ByteStream m) a
+  , materialize
+  , dematerialize
   ) where
 
 import           Prelude hiding

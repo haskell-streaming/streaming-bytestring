@@ -45,140 +45,135 @@
 -- extended by Don Stewart and Duncan Coutts. Lazy variant by Duncan Coutts and
 -- Don Stewart. Streaming variant by Michael Thompson, following the ideas of
 -- Gabriel Gonzales' pipes-bytestring.
-module Data.ByteString.Streaming (
-    -- * The @ByteString@ type
+module Data.ByteString.Streaming
+  ( -- * The @ByteStream@ type
     ByteStream
+  , ByteString
 
     -- * Introducing and eliminating 'ByteStream's
-    , empty            -- empty :: ByteStream m ()
-    , singleton        -- singleton :: Monad m => Word8 -> ByteStream m ()
-    , pack             -- pack :: Monad m => Stream (Of Word8) m r -> ByteStream m r
-    , unpack           -- unpack :: Monad m => ByteStream m r -> Stream (Of Word8) m r
-    , fromLazy         -- fromLazy :: Monad m => ByteString -> ByteStream m ()
-    , toLazy           -- toLazy :: Monad m => ByteStream m () -> m ByteString
-    , toLazy_          -- toLazy' :: Monad m => ByteStream m () -> m (Of ByteString r)
-    , fromChunks       -- fromChunks :: Monad m => Stream (Of ByteString) m r -> ByteStream m r
-    , toChunks         -- toChunks :: Monad m => ByteStream m r -> Stream (Of ByteString) m r
-    , fromStrict       -- fromStrict :: ByteString -> ByteStream m ()
-    , toStrict         -- toStrict :: Monad m => ByteStream m () -> m ByteString
-    , toStrict_        -- toStrict_ :: Monad m => ByteStream m r -> m (Of ByteString r)
-    , effects
-    , copy
-    , drained
-    , mwrap
-    , distribute       -- distribute :: ByteStream (t m) a -> t (ByteStream m) a
-
+  , empty            -- empty :: ByteStream m ()
+  , singleton        -- singleton :: Monad m => Word8 -> ByteStream m ()
+  , pack             -- pack :: Monad m => Stream (Of Word8) m r -> ByteStream m r
+  , unpack           -- unpack :: Monad m => ByteStream m r -> Stream (Of Word8) m r
+  , fromLazy         -- fromLazy :: Monad m => ByteString -> ByteStream m ()
+  , toLazy           -- toLazy :: Monad m => ByteStream m () -> m ByteString
+  , toLazy_          -- toLazy' :: Monad m => ByteStream m () -> m (Of ByteString r)
+  , fromChunks       -- fromChunks :: Monad m => Stream (Of ByteString) m r -> ByteStream m r
+  , toChunks         -- toChunks :: Monad m => ByteStream m r -> Stream (Of ByteString) m r
+  , fromStrict       -- fromStrict :: ByteString -> ByteStream m ()
+  , toStrict         -- toStrict :: Monad m => ByteStream m () -> m ByteString
+  , toStrict_        -- toStrict_ :: Monad m => ByteStream m r -> m (Of ByteString r)
+  , effects
+  , copy
+  , drained
+  , mwrap
+  , distribute       -- distribute :: ByteStream (t m) a -> t (ByteStream m) a
 
     -- * Transforming ByteStreams
-    , map              -- map :: Monad m => (Word8 -> Word8) -> ByteStream m r -> ByteStream m r
-    , intercalate      -- intercalate :: Monad m => ByteStream m () -> Stream (ByteStream m) m r -> ByteStream m r
-    , intersperse      -- intersperse :: Monad m => Word8 -> ByteStream m r -> ByteStream m r
+  , map              -- map :: Monad m => (Word8 -> Word8) -> ByteStream m r -> ByteStream m r
+  , intercalate      -- intercalate :: Monad m => ByteStream m () -> Stream (ByteStream m) m r -> ByteStream m r
+  , intersperse      -- intersperse :: Monad m => Word8 -> ByteStream m r -> ByteStream m r
 
     -- * Basic interface
-    , cons             -- cons :: Monad m => Word8 -> ByteStream m r -> ByteStream m r
-    , cons'            -- cons' :: Word8 -> ByteStream m r -> ByteStream m r
-    , snoc
-    , append           -- append :: Monad m => ByteStream m r -> ByteStream m s -> ByteStream m s
-    , filter           -- filter :: (Word8 -> Bool) -> ByteStream m r -> ByteStream m r
-    , uncons           -- uncons :: Monad m => ByteStream m r -> m (Either r (Word8, ByteStream m r))
-    , nextByte -- nextByte :: Monad m => ByteStream m r -> m (Either r (Word8, ByteStream m r))
-    , denull
+  , cons             -- cons :: Monad m => Word8 -> ByteStream m r -> ByteStream m r
+  , cons'            -- cons' :: Word8 -> ByteStream m r -> ByteStream m r
+  , snoc
+  , append           -- append :: Monad m => ByteStream m r -> ByteStream m s -> ByteStream m s
+  , filter           -- filter :: (Word8 -> Bool) -> ByteStream m r -> ByteStream m r
+  , uncons           -- uncons :: Monad m => ByteStream m r -> m (Either r (Word8, ByteStream m r))
+  , nextByte -- nextByte :: Monad m => ByteStream m r -> m (Either r (Word8, ByteStream m r))
+  , denull
 
     -- * Substrings
-
     -- ** Breaking strings
-    , break            -- break :: Monad m => (Word8 -> Bool) -> ByteStream m r -> ByteStream m (ByteStream m r)
-    , drop             -- drop :: Monad m => GHC.Int.Int64 -> ByteStream m r -> ByteStream m r
-    , dropWhile
-    , group            -- group :: Monad m => ByteStream m r -> Stream (ByteStream m) m r
-    , groupBy
-    , span             -- span :: Monad m => (Word8 -> Bool) -> ByteStream m r -> ByteStream m (ByteStream m r)
-    , splitAt          -- splitAt :: Monad m => GHC.Int.Int64 -> ByteStream m r -> ByteStream m (ByteStream m r)
-    , splitWith        -- splitWith :: Monad m => (Word8 -> Bool) -> ByteStream m r -> Stream (ByteStream m) m r
-    , take             -- take :: Monad m => GHC.Int.Int64 -> ByteStream m r -> ByteStream m ()
-    , takeWhile        -- takeWhile :: (Word8 -> Bool) -> ByteStream m r -> ByteStream m ()
+  , break            -- break :: Monad m => (Word8 -> Bool) -> ByteStream m r -> ByteStream m (ByteStream m r)
+  , drop             -- drop :: Monad m => GHC.Int.Int64 -> ByteStream m r -> ByteStream m r
+  , dropWhile
+  , group            -- group :: Monad m => ByteStream m r -> Stream (ByteStream m) m r
+  , groupBy
+  , span             -- span :: Monad m => (Word8 -> Bool) -> ByteStream m r -> ByteStream m (ByteStream m r)
+  , splitAt          -- splitAt :: Monad m => GHC.Int.Int64 -> ByteStream m r -> ByteStream m (ByteStream m r)
+  , splitWith        -- splitWith :: Monad m => (Word8 -> Bool) -> ByteStream m r -> Stream (ByteStream m) m r
+  , take             -- take :: Monad m => GHC.Int.Int64 -> ByteStream m r -> ByteStream m ()
+  , takeWhile        -- takeWhile :: (Word8 -> Bool) -> ByteStream m r -> ByteStream m ()
 
     -- ** Breaking into many substrings
-    , split            -- split :: Monad m => Word8 -> ByteStream m r -> Stream (ByteStream m) m r
+  , split            -- split :: Monad m => Word8 -> ByteStream m r -> Stream (ByteStream m) m r
 
     -- ** Special folds
-
-    , concat          -- concat :: Monad m => Stream (ByteStream m) m r -> ByteStream m r
+  , concat          -- concat :: Monad m => Stream (ByteStream m) m r -> ByteStream m r
 
     -- * Builders
-
-    , toStreamingByteStringWith
-    , toStreamingByteString
-    , toBuilder
-    , concatBuilders
+  , toStreamingByteStringWith
+  , toStreamingByteString
+  , toBuilder
+  , concatBuilders
 
     -- * Building ByteStreams
-
     -- ** Infinite ByteStreams
-    , repeat           -- repeat :: Word8 -> ByteStream m r
-    , iterate          -- iterate :: (Word8 -> Word8) -> Word8 -> ByteStream m r
-    , cycle            -- cycle :: Monad m => ByteStream m r -> ByteStream m s
+  , repeat           -- repeat :: Word8 -> ByteStream m r
+  , iterate          -- iterate :: (Word8 -> Word8) -> Word8 -> ByteStream m r
+  , cycle            -- cycle :: Monad m => ByteStream m r -> ByteStream m s
 
     -- ** Unfolding ByteStreams
-    , unfoldM          -- unfoldr :: (a -> m (Maybe (Word8, a))) -> m a -> ByteStream m ()
-    , unfoldr          -- unfold  :: (a -> Either r (Word8, a)) -> a -> ByteStream m r
-    , reread
+  , unfoldM          -- unfoldr :: (a -> m (Maybe (Word8, a))) -> m a -> ByteStream m ()
+  , unfoldr          -- unfold  :: (a -> Either r (Word8, a)) -> a -> ByteStream m r
+  , reread
 
     -- *  Folds, including support for `Control.Foldl`
-    , foldr            -- foldr :: Monad m => (Word8 -> a -> a) -> a -> ByteStream m () -> m a
-    , fold             -- fold :: Monad m => (x -> Word8 -> x) -> x -> (x -> b) -> ByteStream m () -> m b
-    , fold_            -- fold' :: Monad m => (x -> Word8 -> x) -> x -> (x -> b) -> ByteStream m r -> m (b, r)
+  , foldr            -- foldr :: Monad m => (Word8 -> a -> a) -> a -> ByteStream m () -> m a
+  , fold             -- fold :: Monad m => (x -> Word8 -> x) -> x -> (x -> b) -> ByteStream m () -> m b
+  , fold_            -- fold' :: Monad m => (x -> Word8 -> x) -> x -> (x -> b) -> ByteStream m r -> m (b, r)
+  , head
+  , head_
+  , last
+  , last_
+  , length
+  , length_
+  , null
+  , null_
+  , nulls
+  , testNull
+  , count
+  , count_
 
-    , head
-    , head_
-    , last
-    , last_
-    , length
-    , length_
-    , null
-    , null_
-    , nulls
-    , testNull
-    , count
-    , count_
     -- * I\/O with 'ByteStream's
-
     -- ** Standard input and output
-    , getContents      -- getContents :: ByteStream IO ()
-    , stdin            -- stdin :: ByteStream IO ()
-    , stdout           -- stdout :: ByteStream IO r -> IO r
-    , interact         -- interact :: (ByteStream IO () -> ByteStream IO r) -> IO r
+  , getContents      -- getContents :: ByteStream IO ()
+  , stdin            -- stdin :: ByteStream IO ()
+  , stdout           -- stdout :: ByteStream IO r -> IO r
+  , interact         -- interact :: (ByteStream IO () -> ByteStream IO r) -> IO r
 
     -- ** Files
-    , readFile         -- readFile :: FilePath -> ByteStream IO ()
-    , writeFile        -- writeFile :: FilePath -> ByteStream IO r -> IO r
-    , appendFile       -- appendFile :: FilePath -> ByteStream IO r -> IO r
+  , readFile         -- readFile :: FilePath -> ByteStream IO ()
+  , writeFile        -- writeFile :: FilePath -> ByteStream IO r -> IO r
+  , appendFile       -- appendFile :: FilePath -> ByteStream IO r -> IO r
 
     -- ** I\/O with Handles
-    , fromHandle       -- fromHandle :: Handle -> ByteStream IO ()
-    , toHandle         -- toHandle :: Handle -> ByteStream IO r -> IO r
-    , hGet             -- hGet :: Handle -> Int -> ByteStream IO ()
-    , hGetContents     -- hGetContents :: Handle -> ByteStream IO ()
-    , hGetContentsN    -- hGetContentsN :: Int -> Handle -> ByteStream IO ()
-    , hGetN            -- hGetN :: Int -> Handle -> Int -> ByteStream IO ()
-    , hGetNonBlocking  -- hGetNonBlocking :: Handle -> Int -> ByteStream IO ()
-    , hGetNonBlockingN -- hGetNonBlockingN :: Int -> Handle -> Int -> ByteStream IO ()
-    , hPut             -- hPut :: Handle -> ByteStream IO r -> IO r
---    , hPutNonBlocking  -- hPutNonBlocking :: Handle -> ByteStream IO r -> ByteStream IO r
+  , fromHandle       -- fromHandle :: Handle -> ByteStream IO ()
+  , toHandle         -- toHandle :: Handle -> ByteStream IO r -> IO r
+  , hGet             -- hGet :: Handle -> Int -> ByteStream IO ()
+  , hGetContents     -- hGetContents :: Handle -> ByteStream IO ()
+  , hGetContentsN    -- hGetContentsN :: Int -> Handle -> ByteStream IO ()
+  , hGetN            -- hGetN :: Int -> Handle -> Int -> ByteStream IO ()
+  , hGetNonBlocking  -- hGetNonBlocking :: Handle -> Int -> ByteStream IO ()
+  , hGetNonBlockingN -- hGetNonBlockingN :: Int -> Handle -> Int -> ByteStream IO ()
+  , hPut             -- hPut :: Handle -> ByteStream IO r -> IO r
+  --    , hPutNonBlocking  -- hPutNonBlocking :: Handle -> ByteStream IO r -> ByteStream IO r
     -- * Etc.
-    , zipWithStream    -- zipWithStream :: Monad m => (forall x. a -> ByteStream m x -> ByteStream m x) -> [a] -> Stream (ByteStream m) m r -> Stream (ByteStream m) m r
+  , zipWithStream    -- zipWithStream :: Monad m => (forall x. a -> ByteStream m x -> ByteStream m x) -> [a] -> Stream (ByteStream m) m r -> Stream (ByteStream m) m r
 
     -- * Simple chunkwise operations
-    , unconsChunk
-    , nextChunk
-    , chunk
-    , foldrChunks
-    , foldlChunks
-    , chunkFold
-    , chunkFoldM
-    , chunkMap
-    , chunkMapM
-    , chunkMapM_
+  , unconsChunk
+  , nextChunk
+  , chunk
+  , foldrChunks
+  , foldlChunks
+  , chunkFold
+  , chunkFoldM
+  , chunkMap
+  , chunkMapM
+  , chunkMapM_
   ) where
 
 import           Prelude hiding
