@@ -5,14 +5,14 @@ module Main ( main ) where
 import           Control.Monad.Trans.Resource (runResourceT)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as BL
-import qualified Data.ByteString.Streaming as Q
-import qualified Data.ByteString.Streaming.Char8 as Q8
-import qualified Data.ByteString.Streaming.Internal as QI
 import           Data.Function (on)
 import           Data.Functor.Identity
 import qualified Data.List as L
 import           Data.String (fromString)
 import qualified Streaming as SM
+import qualified Streaming.ByteString as Q
+import qualified Streaming.ByteString.Char8 as Q8
+import qualified Streaming.ByteString.Internal as QI
 import qualified Streaming.Prelude as S
 import           System.IO
 import           Test.SmallCheck.Series

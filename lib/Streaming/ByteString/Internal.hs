@@ -10,13 +10,13 @@
 {-# LANGUAGE UnliftedFFITypes      #-}
 
 -- |
--- Module      : Data.ByteString.Streaming.Internal
+-- Module      : Streaming.ByteString.Internal
 -- Copyright   : (c) Don Stewart 2006
 --               (c) Duncan Coutts 2006-2011
 --               (c) Michael Thompson 2015
 -- License     : BSD-style
 
-module Data.ByteString.Streaming.Internal
+module Streaming.ByteString.Internal
   ( ByteStream(..)
   , ByteString
   , consChunk         -- :: ByteString -> ByteStream m r -> ByteStream m r

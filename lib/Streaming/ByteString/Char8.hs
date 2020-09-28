@@ -5,7 +5,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 -- |
--- Module      : Data.ByteString.Streaming.Char8
+-- Module      : Streaming.ByteString.Char8
 -- Copyright   : (c) Don Stewart 2006
 --               (c) Duncan Coutts 2006-2011
 --               (c) Michael Thompson 2015
@@ -19,7 +19,7 @@
 -- with @http-client@, @attoparsec@, @aeson@, @zlib@ etc. can be found in the
 -- 'streaming-utils' library.
 
-module Data.ByteString.Streaming.Char8
+module Streaming.ByteString.Char8
   ( -- * The @ByteStream@ type
     ByteStream
   , ByteString
@@ -181,10 +181,10 @@ import           Streaming hiding (concats, distribute, unfold)
 import           Streaming.Internal (Stream(..))
 import qualified Streaming.Prelude as SP
 
-import qualified Data.ByteString.Streaming as R
-import           Data.ByteString.Streaming.Internal
+import qualified Streaming.ByteString as Q
+import           Streaming.ByteString.Internal
 
-import           Data.ByteString.Streaming
+import           Streaming.ByteString
     (append, appendFile, concat, concatBuilders, cycle, denull, distribute,
     drained, drop, effects, empty, fromChunks, fromHandle, fromLazy,
     fromStrict, getContents, group, hGet, hGetContents, hGetContentsN, hGetN,
@@ -193,7 +193,6 @@ import           Data.ByteString.Streaming
     take, testNull, toBuilder, toChunks, toHandle, toLazy, toLazy_,
     toStreamingByteString, toStreamingByteStringWith, toStrict, toStrict_,
     unconsChunk, writeFile)
- --   hPutNonBlocking,
 
 import           Data.Char (isDigit)
 import           Data.Word (Word8)
@@ -236,12 +235,12 @@ pack  = fromChunks
 
 -- | /O(1)/ Cons a 'Char' onto a byte stream.
 cons :: Monad m => Char -> ByteStream m r -> ByteStream m r
-cons c = R.cons (c2w c)
+cons c = Q.cons (c2w c)
 {-# INLINE cons #-}
 
 -- | /O(1)/ Yield a 'Char' as a minimal 'ByteStream'
 singleton :: Monad m => Char -> ByteStream m ()
-singleton = R.singleton . c2w
+singleton = Q.singleton . c2w
 {-# INLINE singleton #-}
 
 -- | /O(1)/ Unlike 'cons', 'cons\'' is
@@ -264,12 +263,12 @@ cons' c cs             = Chunk (B.singleton (c2w c)) cs
 --
 -- | /O(n\/c)/ Append a byte to the end of a 'ByteStream'
 snoc :: Monad m => ByteStream m r -> Char -> ByteStream m r
-snoc cs = R.snoc cs . c2w
+snoc cs = Q.snoc cs . c2w
 {-# INLINE snoc #-}
 
 -- | /O(1)/ Extract the first element of a ByteStream, which must be non-empty.
 head_ :: Monad m => ByteStream m r -> m Char
-head_ = fmap w2c . R.head_
+head_ = fmap w2c . Q.head_
 {-# INLINE head_ #-}
 
 -- | /O(1)/ Extract the first element of a ByteStream, if possible. Suitable for
@@ -279,13 +278,13 @@ head_ = fmap w2c . R.head_
 -- S.mapped Q.head :: Stream (Q.ByteStream m) m r -> Stream (Of (Maybe Char)) m r
 -- @
 head :: Monad m => ByteStream m r -> m (Of (Maybe Char) r)
-head = fmap (\(m:>r) -> fmap w2c m :> r) . R.head
+head = fmap (\(m:>r) -> fmap w2c m :> r) . Q.head
 {-# INLINE head #-}
 
 -- | /O(n\/c)/ Extract the last element of a ByteStream, which must be finite
 -- and non-empty.
 last_ :: Monad m => ByteStream m r -> m Char
-last_ = fmap w2c . R.last_
+last_ = fmap w2c . Q.last_
 {-# INLINE last_ #-}
 
 -- | Extract the last element of a `ByteStream`, if possible. Suitable for use
@@ -295,12 +294,12 @@ last_ = fmap w2c . R.last_
 -- S.mapped Q.last :: Streaming (ByteStream m) m r -> Stream (Of (Maybe Char)) m r
 -- @
 last :: Monad m => ByteStream m r -> m (Of (Maybe Char) r)
-last = fmap (\(m:>r) -> fmap w2c m :> r) . R.last
+last = fmap (\(m:>r) -> fmap w2c m :> r) . Q.last
 {-# INLINE last #-}
 
 -- | The 'groupBy' function is a generalized version of 'group'.
 groupBy :: Monad m => (Char -> Char -> Bool) -> ByteStream m r -> Stream (ByteStream m) m r
-groupBy rel = R.groupBy (\w w' -> rel (w2c w) (w2c w'))
+groupBy rel = Q.groupBy (\w w' -> rel (w2c w) (w2c w'))
 {-# INLINE groupBy #-}
 
 -- | /O(1)/ Extract the head and tail of a ByteStream, returning Nothing
@@ -321,14 +320,14 @@ uncons (Go m) = m >>= uncons
 -- | /O(n)/ 'map' @f xs@ is the ByteStream obtained by applying @f@ to each
 -- element of @xs@.
 map :: Monad m => (Char -> Char) -> ByteStream m r -> ByteStream m r
-map f = R.map (c2w . f . w2c)
+map f = Q.map (c2w . f . w2c)
 {-# INLINE map #-}
 
 -- | The 'intersperse' function takes a 'Char' and a 'ByteStream' and
 -- \`intersperses\' that byte between the elements of the 'ByteStream'.
 -- It is analogous to the intersperse function on Streams.
 intersperse :: Monad m => Char -> ByteStream m r -> ByteStream m r
-intersperse c = R.intersperse (c2w c)
+intersperse c = Q.intersperse (c2w c)
 {-# INLINE intersperse #-}
 
 -- -- ---------------------------------------------------------------------
@@ -363,13 +362,13 @@ fold step begin done p0 = loop p0 begin
 --
 -- > iterate f x == [x, f x, f (f x), ...]
 iterate :: (Char -> Char) -> Char -> ByteStream m r
-iterate f c = R.iterate (c2w . f . w2c) (c2w c)
+iterate f c = Q.iterate (c2w . f . w2c) (c2w c)
 {-# INLINE iterate #-}
 
 -- | @'repeat' x@ is an infinite ByteStream, with @x@ the value of every
 -- element.
 repeat :: Char -> ByteStream m r
-repeat = R.repeat . c2w
+repeat = Q.repeat . c2w
 {-# INLINE repeat #-}
 
 -- | 'cycle' ties a finite ByteStream into a circular one, or equivalently,
@@ -381,7 +380,7 @@ repeat = R.repeat . c2w
 -- returns 'Just' @(a,b)@, in which case, @a@ is a prepending to the ByteStream
 -- and @b@ is used as the next element in a recursive call.
 unfoldM :: Monad m => (a -> Maybe (Char, a)) -> a -> ByteStream m ()
-unfoldM f = R.unfoldM go where
+unfoldM f = Q.unfoldM go where
   go a = case f a of
     Nothing     -> Nothing
     Just (c,a') -> Just (c2w c, a')
@@ -392,24 +391,24 @@ unfoldM f = R.unfoldM go where
 -- end of the stream. Note also that the `Char` values will be truncated to
 -- 8-bits.
 unfoldr :: (a -> Either r (Char, a)) -> a -> ByteStream m r
-unfoldr step = R.unfoldr (either Left (\(c,a) -> Right (c2w c,a)) . step)
+unfoldr step = Q.unfoldr (either Left (\(c,a) -> Right (c2w c,a)) . step)
 {-# INLINE unfoldr #-}
 
 -- | 'takeWhile', applied to a predicate @p@ and a ByteStream @xs@,
 -- returns the longest prefix (possibly empty) of @xs@ of elements that
 -- satisfy @p@.
 takeWhile :: Monad m => (Char -> Bool) -> ByteStream m r -> ByteStream m ()
-takeWhile f  = R.takeWhile (f . w2c)
+takeWhile f  = Q.takeWhile (f . w2c)
 {-# INLINE takeWhile #-}
 
 -- | 'dropWhile' @p xs@ returns the suffix remaining after 'takeWhile' @p xs@.
 dropWhile :: Monad m => (Char -> Bool) -> ByteStream m r -> ByteStream m r
-dropWhile f = R.dropWhile (f . w2c)
+dropWhile f = Q.dropWhile (f . w2c)
 {-# INLINE dropWhile #-}
 
 -- | 'break' @p@ is equivalent to @'span' ('not' . p)@.
 break :: Monad m => (Char -> Bool) -> ByteStream m r -> ByteStream m (ByteStream m r)
-break f = R.break (f . w2c)
+break f = Q.break (f . w2c)
 {-# INLINE break #-}
 
 -- | 'span' @p xs@ breaks the ByteStream into two segments. It is
@@ -420,7 +419,7 @@ span p = break (not . p)
 
 -- | Like `split`, but you can supply your own splitting predicate.
 splitWith :: Monad m => (Char -> Bool) -> ByteStream m r -> Stream (ByteStream m) m r
-splitWith f = R.splitWith (f . w2c)
+splitWith f = Q.splitWith (f . w2c)
 {-# INLINE splitWith #-}
 
 {- | /O(n)/ Break a 'ByteStream' into pieces separated by the byte
@@ -445,7 +444,7 @@ a
 a peel
 -}
 split :: Monad m => Char -> ByteStream m r -> Stream (ByteStream m) m r
-split c = R.split (c2w c)
+split c = Q.split (c2w c)
 {-# INLINE split #-}
 
 -- -- ---------------------------------------------------------------------
@@ -455,7 +454,7 @@ split c = R.split (c2w c)
 -- returns a ByteStream containing those characters that satisfy the
 -- predicate.
 filter :: Monad m => (Char -> Bool) -> ByteStream m r -> ByteStream m r
-filter p = R.filter (p . w2c)
+filter p = Q.filter (p . w2c)
 {-# INLINE filter #-}
 
 -- | 'lines' turns a ByteStream into a connected stream of ByteStreams at divide
@@ -536,7 +535,7 @@ unlines = loop where
 -- can write @mapped toStrict . words@ or the like, if strict bytestrings are
 -- needed.
 words :: Monad m => ByteStream m r -> Stream (ByteStream m) m r
-words = filtered . R.splitWith B.isSpaceWord8
+words = filtered . Q.splitWith B.isSpaceWord8
  where
   filtered stream = case stream of
     Return r -> Return r
@@ -650,7 +649,7 @@ string = chunk . B.pack . Prelude.map B.c2w
 
 -- | Returns the number of times its argument appears in the `ByteStream`.
 count_ :: Monad m => Char -> ByteStream m r -> m Int
-count_ c = R.count_ (c2w c)
+count_ c = Q.count_ (c2w c)
 {-# INLINE count_ #-}
 
 -- | Returns the number of times its argument appears in the `ByteStream`.
@@ -660,14 +659,14 @@ count_ c = R.count_ (c2w c)
 -- S.mapped (Q.count \'a\') :: Stream (Q.ByteStream m) m r -> Stream (Of Int) m r
 -- @
 count :: Monad m => Char -> ByteStream m r -> m (Of Int r)
-count c = R.count (c2w c)
+count c = Q.count (c2w c)
 {-# INLINE count #-}
 
 -- | /O(1)/ Extract the head and tail of a 'ByteStream', or its return value if
 -- it is empty. This is the \'natural\' uncons for an effectful byte stream.
 nextChar :: Monad m => ByteStream m r -> m (Either r (Char, ByteStream m r))
 nextChar b = do
-  e <- R.nextByte b
+  e <- Q.nextByte b
   case e of
     Left r       -> return $! Left r
     Right (w,bs) -> return $! Right (w2c w, bs)

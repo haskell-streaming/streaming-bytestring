@@ -4,7 +4,7 @@
 {-# LANGUAGE RankNTypes   #-}
 
 -- |
--- Module      : Data.ByteString.Streaming
+-- Module      : Streaming.ByteString
 -- Copyright   : (c) Don Stewart 2006
 --               (c) Duncan Coutts 2006-2011
 --               (c) Michael Thompson 2015
@@ -45,7 +45,7 @@
 -- extended by Don Stewart and Duncan Coutts. Lazy variant by Duncan Coutts and
 -- Don Stewart. Streaming variant by Michael Thompson, following the ideas of
 -- Gabriel Gonzales' pipes-bytestring.
-module Data.ByteString.Streaming
+module Streaming.ByteString
   ( -- * The @ByteStream@ type
     ByteStream
   , ByteString
@@ -192,8 +192,8 @@ import qualified Data.ByteString.Internal as B
 import qualified Data.ByteString.Lazy.Internal as BI
 import qualified Data.ByteString.Unsafe as B
 
-import           Data.ByteString.Streaming.Internal
 import           Streaming hiding (concats, distribute, unfold)
+import           Streaming.ByteString.Internal
 import           Streaming.Internal (Stream(..))
 import qualified Streaming.Prelude as SP
 
