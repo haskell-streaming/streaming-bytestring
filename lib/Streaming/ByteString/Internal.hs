@@ -101,7 +101,7 @@ type ByteString = ByteStream
 -- supporting many efficient operations.
 --
 -- An effectful 'ByteStream' contains 8-bit bytes, or by using the operations
--- from "Data.ByteString.Streaming.Char8" it can be interpreted as containing
+-- from "Streaming.ByteString.Char8" it can be interpreted as containing
 -- 8-bit characters.
 data ByteStream m r =
   Empty r

@@ -15,7 +15,7 @@
 -- Portability : portable
 --
 -- See the simple examples of use <https://gist.github.com/michaelt/6c6843e6dd8030e95d58 here>
--- and the @ghci@ examples especially in "Data.ByteString.Streaming.Char8".
+-- and the @ghci@ examples especially in "Streaming.ByteString.Char8".
 -- We begin with a slight modification of the documentation to "Data.ByteString.Lazy":
 --
 -- A time and space-efficient implementation of effectful byte streams using a
@@ -37,7 +37,7 @@
 -- This module is intended to be imported @qualified@, to avoid name clashes
 -- with "Prelude" functions. eg.
 --
--- > import qualified Data.ByteString.Streaming as Q
+-- > import qualified Streaming.ByteString as Q
 --
 -- Original GHC implementation by Bryan O\'Sullivan. Rewritten to use
 -- 'Data.Array.Unboxed.UArray' by Simon Marlow. Rewritten to support slices and
@@ -568,12 +568,12 @@ nextChunk (Chunk c cs)
 -- | /O(n\/c)/ Extract the last element of a 'ByteStream', which must be finite
 -- and non-empty.
 last_ :: Monad m => ByteStream m r -> m Word8
-last_ (Empty _)      = error "Data.ByteString.Streaming.last: empty string"
+last_ (Empty _)      = error "Streaming.ByteString.last: empty string"
 last_ (Go m)         = m >>= last_
 last_ (Chunk c0 cs0) = go c0 cs0
  where
    go c (Empty _)    = if B.null c
-       then error "Data.ByteString.Streaming.last: empty string"
+       then error "Streaming.ByteString.last: empty string"
        else return $ unsafeLast c
    go _ (Chunk c cs) = go c cs
    go x (Go m)       = m >>= go x

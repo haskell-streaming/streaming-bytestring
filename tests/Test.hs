@@ -117,7 +117,7 @@ firstI = do
 main :: IO ()
 main = defaultMain $ testGroup "Tests"
   [ testGroup "Property Tests"
-    [ testProperty "Data.ByteStream.Streaming.Char8.lines is equivalent to Prelude.lines" $ over chunksSeries $ \chunks ->
+    [ testProperty "Streaming.ByteString.Char8.lines is equivalent to Prelude.lines" $ over chunksSeries $ \chunks ->
         -- This only makes sure that the streaming-bytestring lines function
         -- matches the Prelude lines function when no carriage returns
         -- are present. They are not expected to have the same behavior
