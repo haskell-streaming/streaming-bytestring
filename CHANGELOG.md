@@ -2,6 +2,15 @@
 
 #### Changed
 
+- **The `ByteString` type has been renamed to `ByteStream`**. This fixes a
+  well-reported confusion from users. An alias to the old name has been provided
+  for back-compatibility, but is deprecated and be removed in the next major
+  release.
+- **Modules have been renamed** to match the precedent set by the main
+  `streaming` library. Aliases to the old names have been provided, but will be
+  removed in the next major release.
+  - `Data.ByteString.Streaming` -> `Streaming.ByteString`
+  - `Data.ByteString.Streaming.Char8` -> `Streaming.ByteString.Char8`
 - An order-of-magnitude performance improvement in line splitting, thanks to
   Viktor Dukhovni. [#18]
 - Documentation improved, and docstring coverage is now 100%. [#27]
