@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE CPP                 #-}
+{-# LANGUAGE MultiWayIf          #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -66,6 +67,7 @@ module Streaming.ByteString.Char8
   , nulls            -- null' :: Monad m => ByteStream m r -> m (Of Bool r)
   , uncons           -- uncons :: Monad m => ByteStream m r -> m (Either r (Char, ByteStream m r))
   , nextChar
+  , skipSomeWS
 
     -- * Substrings
     -- ** Breaking strings
@@ -194,7 +196,6 @@ import           Streaming.ByteString
     toStreamingByteString, toStreamingByteStringWith, toStrict, toStrict_,
     unconsChunk, writeFile)
 
-import           Data.Char (isDigit)
 import           Data.Word (Word8)
 import           Foreign.ForeignPtr (withForeignPtr)
 import           Foreign.Ptr
@@ -684,20 +685,215 @@ putStrLn :: MonadIO m => ByteStream m r -> m r
 putStrLn bs = hPut IO.stdout (snoc bs '\n')
 {-# INLINE putStrLn #-}
 
--- | This will read positive or negative Ints that require 18 or fewer characters.
-readInt :: Monad m => ByteStream m r -> m (Compose (Of (Maybe Int)) (ByteStream m) r)
-readInt = go . toStrict . splitAt 18 where
-  go m = do
-    (bs :> rest) <- m
-    case Char8.readInt bs of
-      Nothing -> return (Compose (Nothing :> (chunk bs >> rest)))
-      Just (n,more) -> if B.null more
-        then do
-          e <- uncons rest
-          return $ case e of
-            Left r -> Compose (Just n :> return r)
-            Right (c,rest') -> if isDigit c
-               then Compose (Nothing :> (chunk bs >> cons' c rest'))
-               else Compose (Just n :> (chunk more >> cons' c rest'))
-        else return (Compose (Just n :> (chunk more >> rest)))
+-- | Bounds for Word# multiplication by 10 without overflow, and
+-- absolute values of Int bounds.
+intmaxWord, intminWord, intmaxQuot10, intmaxRem10, intminQuot10, intminRem10 :: Word
+intmaxWord = fromIntegral (maxBound :: Int)
+intminWord = fromIntegral (negate (minBound :: Int))
+(intmaxQuot10, intmaxRem10) = intmaxWord `quotRem` 10
+(intminQuot10, intminRem10) = intminWord `quotRem` 10
+
+-- Predicate to test whether a 'Word8' value is either ASCII whitespace,
+-- or a unicode NBSP (U+00A0).  Optimised for ASCII text, with spaces
+-- as the most frequent whitespace characters.
+w8IsSpace :: Word8 -> Bool
+w8IsSpace = \ !w8 ->
+    -- Avoid the cost of narrowing arithmetic results to Word8,
+    -- the conversion from Word8 to Word is free.
+    let w :: Word
+        !w = fromIntegral w8
+     in w - 0x21 > 0x7e   -- not [x21..0x9f]
+        && ( w == 0x20    -- SP
+          || w - 0x09 < 5 -- HT, NL, VT, FF, CR
+          || w == 0xa0 )  -- NBSP
+{-# INLINE w8IsSpace #-}
+
+-- | Try to position the stream at the next non-whitespace input, by
+-- skipping leading whitespace.  Only a /reasonable/ quantity of
+-- whitespace will be skipped before giving up and returning the rest
+-- of the stream with any remaining whitespace.  Limiting the amount of
+-- whitespace consumed is a safety mechanism to avoid looping forever
+-- on a never-ending stream of whitespace from an untrusted source.
+-- For unconditional dropping of all leading whitespace, use `dropWhile`
+-- with a suitable predicate.
+skipSomeWS :: Monad m => ByteStream m r -> ByteStream m r
+{-# INLINE skipSomeWS #-}
+skipSomeWS = go 0
+  where
+    go !n (Chunk c cs)
+        | k <- B.dropWhile w8IsSpace c
+        , not $ B.null k        = Chunk k cs
+        | n' <- n + B.length c
+        , n' < defaultChunkSize = go n' cs
+        | otherwise = cs
+    go !n (Go m)                = Go $ go n <$> m
+    go _ r                      = r
+
+-- | Try to read an 'Int' value from the 'ByteString', returning
+-- @m (Compose -- (Just val :> str))@ on success, where @val@ is the
+-- value read and @str@ is the rest of the input stream.  If the stream
+-- of digits decodes to a value larger than can be represented by an
+-- 'Int', the returned value will be @m (Compose (Nothing :> str))@,
+-- where the content of @str@ is the same as the original stream, but
+-- some of the monadic effects may already have taken place, so the
+-- original stream MUST NOT be used.  To read the remaining data, you
+-- MUST use the returned @str@.
+--
+-- This function will not read an /unreasonably/ long stream of leading
+-- zero digits when trying to decode a number.  When reading the first
+-- non-zero digit would require requesting a new chunk and ~32KB of
+-- leading zeros have already been read, the conversion is aborted and
+-- 'Nothing' is returned, along with the overly long run of leading
+-- zeros (and any initial explicit plus or minus sign).
+--
+-- 'readInt' does not ignore leading whitespace, the value must start
+-- immediately at the beginning of the input stream.  Use 'skipSomeWS'
+-- if you want to skip a /reasonable/ quantity of leading whitespace.
+--
+-- ==== __Example__
+-- >>> getCompose <$> (readInt . skipSomeWS) stream >>= \case
+-- >>>     Just n  :> rest -> print n >> gladly rest
+-- >>>     Nothing :> rest -> sadly rest
+--
+readInt :: Monad m
+        => ByteStream m r
+        -> m (Compose (Of (Maybe Int)) (ByteStream m) r)
 {-# INLINABLE readInt #-}
+readInt = start
+  where
+    nada str = return $! Compose $ Nothing :> str
+
+    start bs@(Chunk c cs)
+        | B.null c = start cs
+        | w <- B.unsafeHead c
+          = if | w - 0x30 <= 9 -> readDec True Nothing bs
+               | let rest = Chunk (B.tail c) cs
+                 -> if | w == 0x2b -> readDec True  (Just w) rest
+                       | w == 0x2d -> readDec False (Just w) rest
+                       | otherwise -> nada bs
+    start (Go m) = m >>= start
+    start bs@(Empty _) = nada bs
+
+    -- | Read an 'Int' without overflow.  If an overflow is about to take
+    -- place or no number is found, the original input is recovered from any
+    -- initial explicit sign, the accumulated pre-overflow value and the
+    -- number of digits consumed prior to overflow detection.
+    --
+    -- In order to avoid reading an unreasonable number of zero bytes before
+    -- ultimately reporting an overflow, a limit of ~32kB is imposed on the
+    -- number of bytes to read before giving up on /unreasonably long/ input
+    -- that is padded with so many zeros, that it could only be a memory
+    -- exhaustion attack.  Callers who want to trim very long runs of
+    -- zeros could note the sign, and skip leading zeros before calling
+    -- function.  Few if any should want that.
+    {-# INLINE readDec #-}
+    readDec !positive signByte = loop 0 0
+      where
+        loop !nbytes !acc = \ str -> case str of
+            Empty _ -> result nbytes acc str
+            Go m    -> m >>= loop nbytes acc
+            Chunk c cs
+                | !l <- B.length c
+                , l > 0 -> case accumWord acc c of
+                     (0, !_, !_)
+                           -- no more digits found
+                           -> result nbytes acc str
+                     (!n, !a, !inrange)
+                         | False <- inrange
+                           -- result out of 'Int' range
+                           -> overflow nbytes acc str
+                         | n < l, !t <- B.drop n c
+                           -- input not entirely digits
+                           -> result (nbytes + n) a $ Chunk t cs
+                         | a > 0 || nbytes + n < defaultChunkSize
+                           -- if all zeros, not yet too many
+                           -> loop (nbytes + n) a cs
+                         | otherwise
+                           -- too many zeros, bail out with sign
+                           -> overflow nbytes acc str
+                | otherwise
+                           -- skip empty segment
+                           -> loop nbytes acc cs
+
+        -- | Process as many digits as we can, returning the additional
+        -- number of digits found, the updated accumulater, and whether
+        -- the input decimal did not overflow prior to processing all
+        -- the provided digits (end of input or non-digit encountered).
+        accumWord acc (B.PS fp off len) =
+            B.accursedUnutterablePerformIO $ do
+                withForeignPtr fp $ \p -> do
+                    let ptr = p `plusPtr` off
+                        end = ptr `plusPtr` len
+                    x@(!_, !_, !_) <- if positive
+                        then digits intmaxQuot10 intmaxRem10 end ptr 0 acc
+                        else digits intminQuot10 intminRem10 end ptr 0 acc
+                    return x
+          where
+            digits !maxq !maxr !e !ptr = go ptr
+              where
+                go :: Ptr Word8 -> Int -> Word -> IO (Int, Word, Bool)
+                go !p !b !a | p == e = return (b, a, True)
+                go !p !b !a = do
+                    !byte <- peek p
+                    let !w = byte - 0x30
+                        !d = fromIntegral w
+                    if | w > 9
+                         -- No more digits
+                         -> return (b, a, True)
+                       | a < maxq
+                         -- Look for more
+                         -> go (p `plusPtr` 1) (b + 1) (a * 10 + d)
+                       | a > maxq
+                         -- overflow
+                         -> return (b, a, False)
+                       | d <= maxr
+                         -- Ideally this will be the last digit
+                         -> go (p `plusPtr` 1) (b + 1) (a * 10 + d)
+                       | otherwise
+                         -- overflow
+                         -> return (b, a, False)
+
+        -- | Plausible success, provided we got at least one digit!
+        result !nbytes !acc str
+            | nbytes > 0, !i <- w2int acc = return $! Compose $ Just i :> str
+            | otherwise = overflow nbytes acc str -- just the sign perhaps?
+
+        -- This assumes that @negate . fromIntegral@ correctly produces
+        -- @minBound :: Int@ when given its positive 'Word' value as an
+        -- input.  This is true in both 2s-complement and 1s-complement
+        -- arithmetic, so seems like a safe bet.  Tests cover this case,
+        -- though the CI may not run on sufficiently exotic CPUs.
+        w2int !n | positive = fromIntegral n
+                 | otherwise = negate $! fromIntegral n
+
+        -- | Reconstruct any consumed input, and report failure
+        overflow 0 _ str = case signByte of
+            Nothing -> return $ Compose $ Nothing :> str
+            Just w  -> return $ Compose $ Nothing :> Chunk (B.singleton w) str
+        overflow !nbytes !acc str =
+            let !c = overflowBytes nbytes acc
+             in return $! Compose $ Nothing :> Chunk c str
+
+        -- | Reconstruct an @nbytes@-byte prefix consisting of digits
+        -- from the accumulated value @acc@, with sufficiently many
+        -- leading zeros to match the original input length.  This
+        -- relies on decimal numbers (leading zeros aside) having a
+        -- unique representation.  Doing this for potentially mixed-case
+        -- hexadecimal input would require holding on to the input data,
+        -- which would noticeably hurt performance.
+        overflowBytes :: Int -> Word -> B.ByteString
+        overflowBytes !nbytes !acc =
+            B.unsafeCreate (nbytes + signlen) $ \p -> do
+                let end = p `plusPtr` (signlen - 1)
+                    ptr = p `plusPtr` (nbytes + signlen - 1)
+                go end ptr acc
+                mapM_ (poke p) signByte
+          where
+            signlen = if signByte == Nothing then 0 else 1
+
+            go :: Ptr Word8 -> Ptr Word8 -> Word -> IO ()
+            go end !ptr !_ | end == ptr = return ()
+            go end !ptr !a = do
+                let (q, r) = a `quotRem` 10
+                poke ptr $ fromIntegral r + 0x30
+                go end (ptr `plusPtr` (-1)) q

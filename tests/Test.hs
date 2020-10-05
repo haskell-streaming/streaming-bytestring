@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Main ( main ) where
@@ -6,9 +7,12 @@ import           Control.Monad.Trans.Resource (runResourceT)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as BL
 import           Data.Function (on)
+import           Data.Functor.Compose (Compose(..))
 import           Data.Functor.Identity
+import qualified Data.IORef as IOR
 import qualified Data.List as L
 import           Data.String (fromString)
+import           Streaming (Of(..))
 import qualified Streaming as SM
 import qualified Streaming.ByteString as Q
 import qualified Streaming.ByteString.Char8 as Q8
@@ -114,6 +118,219 @@ firstI = do
     $ Q8.readFile "tests/groupBy.txt"  -- ByteStream IO ()
   l @?= 57
 
+readIntCases :: Assertion
+readIntCases = do
+  let imax = maxBound :: Int
+      imin = minBound :: Int
+      imax1 = fromIntegral imax + 1 :: Integer
+      imax10 = fromIntegral imax + 10 :: Integer
+      imin1 = fromIntegral imin - 1 :: Integer
+      imin10 = fromIntegral imin - 10 :: Integer
+      smax = B.pack $ show imax
+      smin = B.pack $ show imin
+      smax1 = B.pack $ show imax1
+      smax10 = B.pack $ show imax10
+      smin1 = B.pack $ show imin1
+      smin10 = B.pack $ show imin10
+      maxfill = QI.defaultChunkSize
+  cnt <- IOR.newIORef 0 -- number of effects in stream.
+  -- Empty input
+  IOR.writeIORef cnt 1
+  res <- Q8.readInt
+         $ QI.Chunk ""
+         $ addEffect cnt
+         $ QI.Chunk ""
+         $ QI.Empty 0
+  check cnt res Nothing ("" :> 0)
+  -- Basic unsigned
+  IOR.writeIORef cnt 1
+  res <- Q8.readInt
+         $ QI.Chunk "123"
+         $ addEffect cnt
+         $ QI.Empty 1
+  check cnt res (Just 123) ("" :> 1)
+  -- Basic negative
+  IOR.writeIORef cnt 2
+  res <- Q8.readInt
+         $ QI.Chunk "-123"
+         $ addEffect cnt
+         $ QI.Chunk "456+789"
+         $ addEffect cnt
+         $ QI.Empty 2
+  check cnt res (Just (-123456)) ("+789" :> 2)
+  -- minBound with leading whitespace
+  IOR.writeIORef cnt 4
+  res <- readIntSkip
+       $ QI.Chunk " \t\n\v\f\r\xa0"
+       $ addEffect cnt
+       $ QI.Chunk (B.take 4 smin)
+       $ addEffect cnt
+       $ QI.Chunk (B.drop 4 smin)
+       $ addEffect cnt
+       $ QI.Chunk "-42"
+       $ addEffect cnt
+       $ QI.Empty 3
+  check cnt res (Just imin) ("-42" :> 3)
+  -- maxBound with leading whitespace
+  IOR.writeIORef cnt 4
+  res <- readIntSkip
+       $ QI.Chunk " \t\n\v\f\r\xa0"
+       $ addEffect cnt
+       $ QI.Chunk (B.take 4 smax)
+       $ addEffect cnt
+       $ QI.Chunk (B.drop 4 smax)
+       $ addEffect cnt
+       $ QI.Chunk "+42"
+       $ addEffect cnt
+       $ QI.Empty 4
+  check cnt res (Just imax) ("+42" :> 4)
+  -- minbound-1 with whitespace
+  IOR.writeIORef cnt 4
+  res <- readIntSkip
+       $ QI.Chunk " \t\n\v\f\r\xa0"
+       $ addEffect cnt
+       $ QI.Chunk (B.take 4 smin1)
+       $ addEffect cnt
+       $ QI.Chunk (B.drop 4 smin1)
+       $ addEffect cnt
+       $ QI.Chunk ""
+       $ addEffect cnt
+       $ QI.Empty 5
+  check cnt res Nothing (smin1 :> 5)
+  -- maxbound+1 with whitespace
+  IOR.writeIORef cnt 4
+  res <- readIntSkip
+       $ QI.Chunk " \t\n\v\f\r\xa0"
+       $ addEffect cnt
+       $ QI.Chunk (B.take 4 smax1)
+       $ addEffect cnt
+       $ QI.Chunk (B.drop 4 smax1)
+       $ addEffect cnt
+       $ QI.Chunk ""
+       $ addEffect cnt
+       $ QI.Empty 6
+  check cnt res Nothing (smax1 :> 6)
+  -- maxBound with explicit plus sign
+  IOR.writeIORef cnt 2
+  res <- readIntSkip
+       $ QI.Chunk " +"
+       $ addEffect cnt
+       $ QI.Chunk smax
+       $ QI.Chunk "tail"
+       $ addEffect cnt
+       $ QI.Empty 7
+  check cnt res (Just imax) ("tail" :> 7)
+  -- maxBound with almost excessive leading whitepace/zeros
+  IOR.writeIORef cnt 4
+  res <- readIntSkip
+       $ QI.Chunk (B.replicate (maxfill-1) ' ')
+       $ addEffect cnt
+       $ QI.Chunk "   +"
+       $ QI.Chunk (B.replicate (maxfill-1) '0')
+       $ addEffect cnt
+       $ QI.Chunk ("000000" `B.append` smax)
+       $ addEffect cnt
+       $ QI.Chunk "tail"
+       $ addEffect cnt
+       $ QI.Empty 8
+  check cnt res (Just imax) ("tail" :> 8)
+  -- (Exactly) too much leading whitespace
+  IOR.writeIORef cnt 3
+  res <- readIntSkip
+       $ QI.Chunk (B.replicate maxfill ' ')
+       $ addEffect cnt
+       $ QI.Chunk " 1"
+       $ addEffect cnt
+       $ QI.Chunk ""
+       $ addEffect cnt
+       $ QI.Empty 9
+  check cnt res Nothing (" 1" :> 9)
+  -- (Exactly) too many leading zeros
+  IOR.writeIORef cnt 3
+  res <- readIntSkip
+       $ QI.Chunk (B.replicate maxfill '0')
+       $ addEffect cnt
+       $ QI.Chunk "1"
+       $ addEffect cnt
+       $ QI.Chunk ""
+       $ addEffect cnt
+       $ QI.Empty 10
+  check cnt res Nothing (B.replicate maxfill '0' `B.append` "1" :> 10)
+  -- Bare plus
+  IOR.writeIORef cnt 1
+  res <- readIntSkip
+       $ QI.Chunk "   +"
+       $ addEffect cnt
+       $ QI.Chunk "foo"
+       $ QI.Empty 11
+  check cnt res Nothing ("+foo" :> 11)
+  -- Bare minus
+  IOR.writeIORef cnt 1
+  res <- readIntSkip
+       $ QI.Chunk "   -"
+       $ addEffect cnt
+       $ QI.Chunk " bar"
+       $ QI.Empty 12
+  check cnt res Nothing ("- bar" :> 12)
+  --
+  IOR.writeIORef cnt 1
+  let msg = "  nothing to see here move along  "
+  res <- Q8.readInt
+       $ QI.Chunk msg
+       $ addEffect cnt
+       $ QI.Empty 13
+  check cnt res Nothing (msg :> 13)
+  -- whitespace-only input
+  IOR.writeIORef cnt 1
+  res <- readIntSkip
+         $ QI.Chunk " "
+         $ addEffect cnt
+         $ QI.Chunk "\n"
+         $ QI.Empty 14
+  check cnt res Nothing ("" :> 14)
+  -- maxbound+10 with whitespace
+  IOR.writeIORef cnt 4
+  res <- readIntSkip
+       $ QI.Chunk " \t\n\v\f\r\xa0"
+       $ addEffect cnt
+       $ QI.Chunk (B.take 4 smax10)
+       $ addEffect cnt
+       $ QI.Chunk (B.drop 4 smax10)
+       $ addEffect cnt
+       $ QI.Chunk ""
+       $ addEffect cnt
+       $ QI.Empty 15
+  check cnt res Nothing (smax10 :> 15)
+  -- minbound-10 with whitespace
+  IOR.writeIORef cnt 4
+  res <- readIntSkip
+       $ QI.Chunk " \t\n\v\f\r\xa0"
+       $ addEffect cnt
+       $ QI.Chunk (B.take 4 smin10)
+       $ addEffect cnt
+       $ QI.Chunk (B.drop 4 smin10)
+       $ addEffect cnt
+       $ QI.Chunk ""
+       $ addEffect cnt
+       $ QI.Empty 16
+  check cnt res Nothing (smin10 :> 16)
+  where
+    -- Count down to zero from initial value
+    readIntSkip = Q8.readInt . Q8.skipSomeWS
+    addEffect cnt str = QI.Go $ const str <$> IOR.modifyIORef' cnt pred
+    check :: IOR.IORef Int
+          -> Compose (Of (Maybe Int)) (QI.ByteStream IO) Int
+          -> Maybe Int
+          -> Of B.ByteString Int
+          -> Assertion
+    check cnt (Compose (gotInt :> str)) wantInt (wantStr :> wantR ) = do
+        ( gotStr :> gotR ) <- Q.toStrict str
+        c <- IOR.readIORef cnt
+        assertBool ("Correct readInt effects " ++ show wantR) $ c == 0
+        assertBool ("Correct readInt value " ++ show wantR ++ ": " ++ show gotInt) $ gotInt == wantInt
+        assertBool ("Correct readInt tail " ++ show wantR ++ ": " ++ show gotStr) $ gotStr == wantStr
+        assertBool ("Correct readInt residue " ++ show wantR ++ ": " ++ show gotR) $ gotR == wantR
+
 main :: IO ()
 main = defaultMain $ testGroup "Tests"
   [ testGroup "Property Tests"
@@ -148,5 +365,6 @@ main = defaultMain $ testGroup "Tests"
     , testCase "groupBy: Char order" groupByCharOrder
     , testCase "findIndexOrEnd" goodFindIndex
     , testCase "Stream Interop" firstI
+    , testCase "readInt" readIntCases
     ]
   ]
