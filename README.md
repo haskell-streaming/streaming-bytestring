@@ -23,13 +23,13 @@ conflicts with both the `bytestring` library and `streaming`, we recommended `Q`
 as the qualified name:
 
 ```haskell
-import qualified Data.ByteString.Streaming.Char8 as Q
+import qualified Streaming.ByteString.Char8 as Q
 ```
 
 Like the `bytestring` library, leaving off the `Char8` will expose an API based
 on `Word8`. Following the philosophy of `streaming` that "the best API is the
 one you already know", these APIs are based closely on `bytestring`. The core
-type is `ByteString m r`, where:
+type is `ByteStream m r`, where:
 
 - `m`: The Monad used to fetch further chunks from the "source", usually `IO`.
 - `r`: The final return value after all streaming has concluded, usually `()` as in `streaming`.
@@ -46,10 +46,10 @@ To open a file of any size and count its characters:
 
 ```haskell
 import Control.Monad.Trans.Resource (runResourceT)
-import qualified Data.ByteString.Streaming.Char8 as Q
+import qualified Streaming.Streaming.Char8 as Q
 
 -- | Represents a potentially-infinite stream of `Char`.
-chars :: ByteString IO ()
+chars :: ByteStream IO ()
 chars = Q.readFile "huge-file.txt"
 
 main :: IO ()
@@ -65,7 +65,7 @@ In the example above you may have noticed a lack of `Of` that we usually see
 with `Stream`. Our old friend `lines` hints at this too:
 
 ```haskell
-lines :: Monad m => ByteString m r -> Stream (ByteString m) m r
+lines :: Monad m => ByteStream m r -> Stream (ByteStream m) m r
 ```
 
 A stream-of-streams, yet no `Of` here either. The return type can't naively be
@@ -82,24 +82,24 @@ countOfI = runResourceT
   . S.filter (== 'i')           -- Stream (Of Char) IO ()
   . S.concat                    -- Stream (Of Char) IO ()
   . S.mapped Q.head             -- Stream (Of (Maybe Char)) IO ()
-  . Q.lines                     -- Stream (Bytestring IO) IO ()
-  $ Q.readFile "huge-file.txt"  -- ByteString IO ()
+  . Q.lines                     -- Stream (ByteStream IO) IO ()
+  $ Q.readFile "huge-file.txt"  -- ByteStream IO ()
 ```
 
 Critically, there are several functions which when combined with `mapped` can
 bring us back into `Of`-land:
 
 ```haskell
-head     :: Monad m => ByteString m r -> m (Of (Maybe Char) r)
-last     :: Monad m => ByteString m r -> m (Of (Maybe Char) r)
-null     :: Monad m => ByteString m r -> m (Of Bool) r)
-count    :: Monad m => ByteString m r -> m (Of Int) r)
-toLazy   :: Monad m => ByteString m r -> m (Of ByteString r) -- Be careful with this.
-toStrict :: Monad m => ByteString m r -> m (Of ByteString r) -- Be even *more* careful with this.
+head     :: Monad m => ByteStream m r -> m (Of (Maybe Char) r)
+last     :: Monad m => ByteStream m r -> m (Of (Maybe Char) r)
+null     :: Monad m => ByteStream m r -> m (Of Bool) r)
+count    :: Monad m => ByteStream m r -> m (Of Int) r)
+toLazy   :: Monad m => ByteStream m r -> m (Of ByteString r) -- Be careful with this.
+toStrict :: Monad m => ByteStream m r -> m (Of ByteString r) -- Be even *more* careful with this.
 ```
 
 When moving in the opposite direction API-wise, consider:
 
 ```haskell
-fromChunks :: Stream (Of ByteString) m r -> ByteString m r
+fromChunks :: Stream (Of ByteString) m r -> ByteStream m r
 ```

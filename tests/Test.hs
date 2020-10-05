@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Main ( main ) where
@@ -6,17 +6,17 @@ module Main ( main ) where
 import           Control.Monad.Trans.Resource (runResourceT)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy.Char8 as BL
-import qualified Data.ByteString.Streaming as Q
-import qualified Data.ByteString.Streaming.Char8 as Q8
-import qualified Data.ByteString.Streaming.Internal as QI
 import           Data.Function (on)
 import           Data.Functor.Compose (Compose(..))
 import           Data.Functor.Identity
 import qualified Data.IORef as IOR
 import qualified Data.List as L
 import           Data.String (fromString)
-import qualified Streaming as SM
 import           Streaming (Of(..))
+import qualified Streaming as SM
+import qualified Streaming.ByteString as Q
+import qualified Streaming.ByteString.Char8 as Q8
+import qualified Streaming.ByteString.Internal as QI
 import qualified Streaming.Prelude as S
 import           System.IO
 import           Test.SmallCheck.Series
@@ -41,26 +41,26 @@ chunksSeries = listOf strSeries
 nats :: Monad m => Series m Int
 nats = generate $ \d -> [1..d]
 
-fromChunks :: [String] -> Q8.ByteString Identity ()
+fromChunks :: [String] -> Q8.ByteStream Identity ()
 fromChunks = Q8.fromChunks . S.each .  map B.pack
 
 unix2dos :: String -> String
 unix2dos = concatMap $ \c -> if c == '\n' then "\r\n" else [c]
 
-unpackToString :: Q8.ByteString Identity () -> String
+unpackToString :: Q8.ByteStream Identity () -> String
 unpackToString = runIdentity . S.toList_ . Q8.unpack
 
-sLines :: Q8.ByteString Identity () -> [B.ByteString]
+sLines :: Q8.ByteStream Identity () -> [B.ByteString]
 sLines
   = runIdentity
   . S.toList_
   . S.mapped Q8.toStrict
   . Q8.lines
 
-noNullChunks :: S.Stream (Q8.ByteString Identity) Identity () -> Bool
+noNullChunks :: S.Stream (Q8.ByteStream Identity) Identity () -> Bool
 noNullChunks = SM.streamFold (\() -> True) runIdentity go
   where
-    go :: Q8.ByteString Identity Bool -> Bool
+    go :: Q8.ByteStream Identity Bool -> Bool
     go (QI.Empty b)           = b
     go (QI.Chunk bs sbs)      = not (B.null bs) && go sbs
     go (QI.Go (Identity sbs)) = go sbs
@@ -113,9 +113,9 @@ firstI = do
     . S.filter (== 'i')
     . S.concat                         -- Stream (Of Char) IO ()
     . S.mapped Q8.head                 -- Stream (Of (Maybe Char)) IO ()
-    . Q8.denull                        -- Stream (ByteString IO) IO ()
-    . Q8.lines                         -- Stream (Bytestring IO) IO ()
-    $ Q8.readFile "tests/groupBy.txt"  -- ByteString IO ()
+    . Q8.denull                        -- Stream (ByteStream IO) IO ()
+    . Q8.lines                         -- Stream (ByteStream IO) IO ()
+    $ Q8.readFile "tests/groupBy.txt"  -- ByteStream IO ()
   l @?= 57
 
 readIntCases :: Assertion
@@ -319,7 +319,7 @@ readIntCases = do
     readIntSkip = Q8.readInt . Q8.skipSomeWS
     addEffect cnt str = QI.Go $ const str <$> IOR.modifyIORef' cnt pred
     check :: IOR.IORef Int
-          -> Compose (Of (Maybe Int)) (QI.ByteString IO) Int
+          -> Compose (Of (Maybe Int)) (QI.ByteStream IO) Int
           -> Maybe Int
           -> Of B.ByteString Int
           -> Assertion
@@ -334,7 +334,7 @@ readIntCases = do
 main :: IO ()
 main = defaultMain $ testGroup "Tests"
   [ testGroup "Property Tests"
-    [ testProperty "Data.ByteString.Streaming.Char8.lines is equivalent to Prelude.lines" $ over chunksSeries $ \chunks ->
+    [ testProperty "Streaming.ByteString.Char8.lines is equivalent to Prelude.lines" $ over chunksSeries $ \chunks ->
         -- This only makes sure that the streaming-bytestring lines function
         -- matches the Prelude lines function when no carriage returns
         -- are present. They are not expected to have the same behavior

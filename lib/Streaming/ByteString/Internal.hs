@@ -10,47 +10,48 @@
 {-# LANGUAGE UnliftedFFITypes      #-}
 
 -- |
--- Module      : Data.ByteString.Streaming.Internal
+-- Module      : Streaming.ByteString.Internal
 -- Copyright   : (c) Don Stewart 2006
 --               (c) Duncan Coutts 2006-2011
 --               (c) Michael Thompson 2015
 -- License     : BSD-style
 
-module Data.ByteString.Streaming.Internal (
-   ByteString (..)
-   , consChunk             -- :: S.ByteString -> ByteString m r -> ByteString m r
-   , chunkOverhead     -- :: Int
-   , defaultChunkSize  -- :: Int
-   , materialize       -- :: (forall x. (r -> x) -> (ByteString -> x -> x) -> (m x -> x) -> x) -> ByteString m r
-   , dematerialize     -- :: Monad m =>  ByteString m r -> forall x.  (r -> x) -> (ByteString -> x -> x) -> (m x -> x) -> x
-   , foldrChunks       -- :: Monad m =>  (ByteString -> a -> a) -> a -> ByteString m r -> m a
-   , foldlChunks       -- :: Monad m =>  (a -> ByteString -> a) -> a -> ByteString m r -> m a
+module Streaming.ByteString.Internal
+  ( ByteStream(..)
+  , ByteString
+  , consChunk         -- :: ByteString -> ByteStream m r -> ByteStream m r
+  , chunkOverhead     -- :: Int
+  , defaultChunkSize  -- :: Int
+  , materialize       -- :: (forall x. (r -> x) -> (ByteString -> x -> x) -> (m x -> x) -> x) -> ByteStream m r
+  , dematerialize     -- :: Monad m =>  ByteStream m r -> forall x.  (r -> x) -> (ByteString -> x -> x) -> (m x -> x) -> x
+  , foldrChunks       -- :: Monad m =>  (ByteString -> a -> a) -> a -> ByteStream m r -> m a
+  , foldlChunks       -- :: Monad m =>  (a -> ByteString -> a) -> a -> ByteStream m r -> m a
 
-   , foldrChunksM       -- :: Monad m => (ByteString -> m a -> m a) -> m a -> ByteString m r -> m a
-   , foldlChunksM       -- :: Monad m => (ByteString -> m a -> m a) -> m a -> ByteString m r -> m a
-   , chunkFold
-   , chunkFoldM
-   , chunkMap
-   , chunkMapM
-   , chunkMapM_
-   , unfoldMChunks
-   , unfoldrChunks
+  , foldrChunksM      -- :: Monad m => (ByteString -> m a -> m a) -> m a -> ByteStream m r -> m a
+  , foldlChunksM      -- :: Monad m => (ByteString -> m a -> m a) -> m a -> ByteStream m r -> m a
+  , chunkFold
+  , chunkFoldM
+  , chunkMap
+  , chunkMapM
+  , chunkMapM_
+  , unfoldMChunks
+  , unfoldrChunks
 
-   , packChars
-   , smallChunkSize     -- :: Int
-   , unpackBytes        -- :: Monad m => ByteString m r -> Stream Word8_ m r
-   , packBytes
-   , chunk             --  :: ByteString -> ByteString m ()
-   , mwrap
-   , unfoldrNE
-   , reread
-   , unsafeLast
-   , unsafeInit
-   , copy
-   , findIndexOrEnd
+  , packChars
+  , smallChunkSize   -- :: Int
+  , unpackBytes      -- :: Monad m => ByteStream m r -> Stream (Of Word8) m r
+  , packBytes
+  , chunk            -- :: ByteString -> ByteStream m ()
+  , mwrap
+  , unfoldrNE
+  , reread
+  , unsafeLast
+  , unsafeInit
+  , copy
+  , findIndexOrEnd
 
-   -- * ResourceT help
-   , bracketByteString
+    -- * ResourceT help
+  , bracketByteString
   ) where
 
 import           Control.Monad
@@ -92,24 +93,28 @@ import           Control.Monad.Base
 import           Control.Monad.Catch (MonadCatch(..))
 import           Control.Monad.Trans.Resource
 
+-- | A type alias for back-compatibility.
+type ByteString = ByteStream
+{-# DEPRECATED ByteString "Use ByteStream instead." #-}
+
 -- | A space-efficient representation of a succession of 'Word8' vectors,
 -- supporting many efficient operations.
 --
--- An effectful 'ByteString' contains 8-bit bytes, or by using the operations
--- from "Data.ByteString.Streaming.Char8" it can be interpreted as containing
+-- An effectful 'ByteStream' contains 8-bit bytes, or by using the operations
+-- from "Streaming.ByteString.Char8" it can be interpreted as containing
 -- 8-bit characters.
-data ByteString m r =
+data ByteStream m r =
   Empty r
-  | Chunk {-# UNPACK #-} !B.ByteString (ByteString m r )
-  | Go (m (ByteString m r ))
+  | Chunk {-# UNPACK #-} !B.ByteString (ByteStream m r )
+  | Go (m (ByteStream m r ))
 
-instance Monad m => Functor (ByteString m) where
+instance Monad m => Functor (ByteStream m) where
   fmap f x = case x of
     Empty a      -> Empty (f a)
     Chunk bs bss -> Chunk bs (fmap f bss)
     Go mbss      -> Go (fmap (fmap f) mbss)
 
-instance Monad m => Applicative (ByteString m) where
+instance Monad m => Applicative (ByteStream m) where
   pure = Empty
   {-# INLINE pure #-}
   bf <*> bx = do {f <- bf; x <- bx; Empty (f x)}
@@ -117,7 +122,7 @@ instance Monad m => Applicative (ByteString m) where
   (*>) = (>>)
   {-# INLINE (*>) #-}
 
-instance Monad m => Monad (ByteString m) where
+instance Monad m => Monad (ByteStream m) where
   return = Empty
   {-# INLINE return #-}
   x0 >> y = loop SPEC x0 where
@@ -138,50 +143,50 @@ instance Monad m => Monad (ByteString m) where
         Go mbss      -> Go (fmap (loop SPEC) mbss)
   {-# INLINEABLE (>>=) #-}
 
-instance MonadIO m => MonadIO (ByteString m) where
+instance MonadIO m => MonadIO (ByteStream m) where
   liftIO io = Go (fmap Empty (liftIO io))
   {-# INLINE liftIO #-}
 
-instance MonadTrans ByteString where
+instance MonadTrans ByteStream where
   lift ma = Go $ fmap Empty ma
   {-# INLINE lift #-}
 
-instance MFunctor ByteString where
+instance MFunctor ByteStream where
   hoist phi bs = case bs of
     Empty r        -> Empty r
     Chunk bs' rest -> Chunk bs' (hoist phi rest)
     Go m           -> Go (phi (fmap (hoist phi) m))
   {-# INLINABLE hoist #-}
 
-instance (r ~ ()) => IsString (ByteString m r) where
+instance (r ~ ()) => IsString (ByteStream m r) where
   fromString = chunk . B.pack . Prelude.map B.c2w
   {-# INLINE fromString #-}
 
-instance (m ~ Identity, Show r) => Show (ByteString m r) where
+instance (m ~ Identity, Show r) => Show (ByteStream m r) where
   show bs0 = case bs0 of  -- the implementation this instance deserves ...
     Empty r           -> "Empty (" ++ show r ++ ")"
     Go (Identity bs') -> "Go (Identity (" ++ show bs' ++ "))"
     Chunk bs'' bs     -> "Chunk " ++ show bs'' ++ " (" ++ show bs ++ ")"
 
-instance (Semigroup r, Monad m) => Semigroup (ByteString m r) where
+instance (Semigroup r, Monad m) => Semigroup (ByteStream m r) where
   (<>) = liftM2 (<>)
   {-# INLINE (<>) #-}
 
-instance (Monoid r, Monad m) => Monoid (ByteString m r) where
+instance (Monoid r, Monad m) => Monoid (ByteStream m r) where
   mempty = Empty mempty
   {-# INLINE mempty #-}
   mappend = liftM2 mappend
   {-# INLINE mappend #-}
 
-instance (MonadBase b m) => MonadBase b (ByteString m) where
+instance (MonadBase b m) => MonadBase b (ByteStream m) where
   liftBase  = mwrap . fmap return . liftBase
   {-# INLINE liftBase #-}
 
-instance (MonadThrow m) => MonadThrow (ByteString m) where
+instance (MonadThrow m) => MonadThrow (ByteStream m) where
   throwM = lift . throwM
   {-# INLINE throwM #-}
 
-instance (MonadCatch m) => MonadCatch (ByteString m) where
+instance (MonadCatch m) => MonadCatch (ByteStream m) where
   catch str f = go str
     where
     go p = case p of
@@ -193,12 +198,12 @@ instance (MonadCatch m) => MonadCatch (ByteString m) where
        (return . f))
   {-# INLINABLE catch #-}
 
-instance (MonadResource m) => MonadResource (ByteString m) where
+instance (MonadResource m) => MonadResource (ByteStream m) where
   liftResourceT = lift . liftResourceT
   {-# INLINE liftResourceT #-}
 
 -- | Like @bracket@, but specialized for `ByteString`.
-bracketByteString :: MonadResource m => IO a -> (a -> IO ()) -> (a -> ByteString m b) -> ByteString m b
+bracketByteString :: MonadResource m => IO a -> (a -> IO ()) -> (a -> ByteStream m b) -> ByteStream m b
 bracketByteString alloc free inside = do
         (key, seed) <- lift (allocate alloc free)
         clean key (inside seed)
@@ -216,14 +221,14 @@ data SPEC = SPEC | SPEC2
 -- -- ------------------------------------------------------------------------
 --
 -- | Smart constructor for 'Chunk'.
-consChunk :: B.ByteString -> ByteString m r -> ByteString m r
+consChunk :: B.ByteString -> ByteStream m r -> ByteStream m r
 consChunk c@(B.PS _ _ len) cs
   | len == 0  = cs
   | otherwise = Chunk c cs
 {-# INLINE consChunk #-}
 
 -- | Yield-style smart constructor for 'Chunk'.
-chunk :: B.ByteString -> ByteString m ()
+chunk :: B.ByteString -> ByteStream m ()
 chunk bs = consChunk bs (Empty ())
 {-# INLINE chunk #-}
 
@@ -235,20 +240,19 @@ chunk bs = consChunk bs (Empty ())
 
     is here  @consChunk@. @mwrap@ is the smart constructor for the internal @Go@ constructor.
 -}
-mwrap :: m (ByteString m r) -> ByteString m r
+mwrap :: m (ByteStream m r) -> ByteStream m r
 mwrap = Go
 {-# INLINE mwrap #-}
 
 -- | Construct a succession of chunks from its Church encoding (compare @GHC.Exts.build@)
-materialize :: (forall x . (r -> x) -> (B.ByteString -> x -> x) -> (m x -> x) -> x)
-            -> ByteString m r
+materialize :: (forall x . (r -> x) -> (B.ByteString -> x -> x) -> (m x -> x) -> x) -> ByteStream m r
 materialize phi = phi Empty Chunk Go
 {-# INLINE[0] materialize #-}
 
 -- | Resolve a succession of chunks into its Church encoding; this is
 -- not a safe operation; it is equivalent to exposing the constructors
 dematerialize :: Monad m
-              => ByteString m r
+              => ByteStream m r
               -> (forall x . (r -> x) -> (B.ByteString -> x -> x) -> (m x -> x) -> x)
 dematerialize x0 nil cons mwrap' = loop SPEC x0
   where
@@ -312,7 +316,7 @@ chunkOverhead = 2 * sizeOf (undefined :: Int)
 --             assert (l' <= l) $ return (B.PS fp 0 l', res)
 -- {-# INLINABLE packBytes' #-}
 
-packBytes :: Monad m => Stream (Of Word8) m r -> ByteString m r
+packBytes :: Monad m => Stream (Of Word8) m r -> ByteStream m r
 packBytes cs0 = do
   (bytes :> rest) <- lift $ SP.toList $ SP.splitAt 32 cs0
   case bytes of
@@ -326,13 +330,13 @@ packBytes cs0 = do
 -- | Convert a vanilla `Stream` of characters into a stream of bytes.
 --
 -- /Note:/ Each `Char` value is truncated to 8 bits.
-packChars :: Monad m => Stream (Of Char) m r -> ByteString m r
+packChars :: Monad m => Stream (Of Char) m r -> ByteStream m r
 packChars = packBytes . SP.map B.c2w
 {-# INLINABLE packChars #-}
 
 -- | The reverse of `packChars`. Given a stream of bytes, produce a `Stream`
 -- individual bytes.
-unpackBytes :: Monad m => ByteString m r ->  Stream (Of Word8) m r
+unpackBytes :: Monad m => ByteStream m r -> Stream (Of Word8) m r
 unpackBytes bss = dematerialize bss Return unpackAppendBytesLazy Effect
   where
   unpackAppendBytesLazy :: B.ByteString -> Stream (Of Word8) m r -> Stream (Of Word8) m r
@@ -368,7 +372,7 @@ unsafeInit (B.PS ps s l) = B.PS ps s (l-1)
 {-# INLINE unsafeInit #-}
 
 -- | Consume the chunks of an effectful `ByteString` with a natural right fold.
-foldrChunks :: Monad m => (B.ByteString -> a -> a) -> a -> ByteString m r -> m a
+foldrChunks :: Monad m => (B.ByteString -> a -> a) -> a -> ByteStream m r -> m a
 foldrChunks step nil bs = dematerialize bs
   (\_ -> return nil)
   (fmap . step)
@@ -377,7 +381,7 @@ foldrChunks step nil bs = dematerialize bs
 
 -- | Consume the chunks of an effectful `ByteString` with a left fold. Suitable
 -- for use with `SP.mapped`.
-foldlChunks :: Monad m => (a -> B.ByteString -> a) -> a -> ByteString m r -> m (Of a r)
+foldlChunks :: Monad m => (a -> B.ByteString -> a) -> a -> ByteStream m r -> m (Of a r)
 foldlChunks f z = go z
   where go a _            | a `seq` False = undefined
         go a (Empty r)    = return (a :> r)
@@ -387,24 +391,24 @@ foldlChunks f z = go z
 
 -- | Instead of mapping over each `Word8` or `Char`, map over each strict
 -- `B.ByteString` chunk in the stream.
-chunkMap :: Monad m => (B.ByteString -> B.ByteString) -> ByteString m r -> ByteString m r
+chunkMap :: Monad m => (B.ByteString -> B.ByteString) -> ByteStream m r -> ByteStream m r
 chunkMap f bs = dematerialize bs return (Chunk . f) Go
 {-# INLINE chunkMap #-}
 
 -- | Like `chunkMap`, but map effectfully.
-chunkMapM :: Monad m => (B.ByteString -> m B.ByteString) -> ByteString m r -> ByteString m r
+chunkMapM :: Monad m => (B.ByteString -> m B.ByteString) -> ByteStream m r -> ByteStream m r
 chunkMapM f bs = dematerialize bs return (\bs' bss -> Go (fmap (`Chunk` bss) (f bs'))) Go
 {-# INLINE chunkMapM #-}
 
 -- | Like `chunkMapM`, but discard the result of each effectful mapping.
-chunkMapM_ :: Monad m => (B.ByteString -> m x) -> ByteString m r -> m r
+chunkMapM_ :: Monad m => (B.ByteString -> m x) -> ByteStream m r -> m r
 chunkMapM_ f bs = dematerialize bs return (\bs' mr -> f bs' >> mr) join
 {-# INLINE chunkMapM_ #-}
 
 -- | @chunkFold@ is preferable to @foldlChunks@ since it is an appropriate
 -- argument for @Control.Foldl.purely@ which permits many folds and sinks to be
 -- run simultaneously on one bytestream.
-chunkFold :: Monad m => (x -> B.ByteString -> x) -> x -> (x -> a) -> ByteString m r -> m (Of a r)
+chunkFold :: Monad m => (x -> B.ByteString -> x) -> x -> (x -> a) -> ByteStream m r -> m (Of a r)
 chunkFold step begin done = go begin
   where go a _            | a `seq` False = undefined
         go a (Empty r)    = return (done a :> r)
@@ -415,7 +419,7 @@ chunkFold step begin done = go begin
 -- | 'chunkFoldM' is preferable to 'foldlChunksM' since it is an appropriate
 -- argument for 'Control.Foldl.impurely' which permits many folds and sinks to
 -- be run simultaneously on one bytestream.
-chunkFoldM :: Monad m => (x -> B.ByteString -> m x) -> m x -> (x -> m a) -> ByteString m r -> m (Of a r)
+chunkFoldM :: Monad m => (x -> B.ByteString -> m x) -> m x -> (x -> m a) -> ByteStream m r -> m (Of a r)
 chunkFoldM step begin done bs = begin >>= go bs
   where
     go str !x = case str of
@@ -425,7 +429,7 @@ chunkFoldM step begin done bs = begin >>= go bs
 {-# INLINABLE chunkFoldM  #-}
 
 -- | Like `foldlChunks`, but fold effectfully. Suitable for use with `SP.mapped`.
-foldlChunksM :: Monad m => (a -> B.ByteString -> m a) -> m a -> ByteString m r -> m (Of a r)
+foldlChunksM :: Monad m => (a -> B.ByteString -> m a) -> m a -> ByteStream m r -> m (Of a r)
 foldlChunksM f z bs = z >>= \a -> go a bs
   where
     go !a str = case str of
@@ -435,7 +439,7 @@ foldlChunksM f z bs = z >>= \a -> go a bs
 {-# INLINABLE foldlChunksM #-}
 
 -- | Consume the chunks of an effectful ByteString with a natural right monadic fold.
-foldrChunksM :: Monad m => (B.ByteString -> m a -> m a) -> m a -> ByteString m r -> m a
+foldrChunksM :: Monad m => (B.ByteString -> m a -> m a) -> m a -> ByteStream m r -> m a
 foldrChunksM step nil bs = dematerialize bs (const nil) step join
 {-# INLINE foldrChunksM #-}
 
@@ -455,7 +459,7 @@ unfoldrNE i f x0
 
 -- | Given some continual monadic action that produces strict `B.ByteString`
 -- chunks, produce a stream of bytes.
-unfoldMChunks :: Monad m => (s -> m (Maybe (B.ByteString, s))) -> s -> ByteString m ()
+unfoldMChunks :: Monad m => (s -> m (Maybe (B.ByteString, s))) -> s -> ByteStream m ()
 unfoldMChunks step = loop where
   loop s = Go $ do
     m <- step s
@@ -465,7 +469,7 @@ unfoldMChunks step = loop where
 {-# INLINABLE unfoldMChunks #-}
 
 -- | Like `unfoldMChunks`, but feed through a final @r@ return value.
-unfoldrChunks :: Monad m => (s -> m (Either r (B.ByteString, s))) -> s -> ByteString m r
+unfoldrChunks :: Monad m => (s -> m (Either r (B.ByteString, s))) -> s -> ByteStream m r
 unfoldrChunks step = loop where
   loop !s = Go $ do
     m <- step s
@@ -484,7 +488,7 @@ unfoldrChunks step = loop where
 -- The other direction here is
 --
 -- > Streams.unfoldM Q.unconsChunk    :: Q.ByteString IO r -> IO (InputStream B.ByteString)
-reread :: Monad m => (s -> m (Maybe B.ByteString)) -> s -> ByteString m ()
+reread :: Monad m => (s -> m (Maybe B.ByteString)) -> s -> ByteStream m ()
 reread step s = loop where
   loop = Go $ do
     m <- step s
@@ -534,7 +538,7 @@ world
    double the number of constructors associated with each chunk.
 
 -}
-copy :: Monad m => ByteString m r -> ByteString (ByteString m) r
+copy :: Monad m => ByteStream m r -> ByteStream (ByteStream m) r
 copy = loop where
   loop str = case str of
     Empty r       -> Empty r

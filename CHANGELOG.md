@@ -1,9 +1,25 @@
 ## Unreleased
 
+Thanks to Viktor Dukhovni and Colin Woodbury for their contributions to this release.
+
+#### Added
+
+- The `skipSomeWS` function for efficiently skipping leading whitespace of both
+  ASCII and non-ASCII.
+
 #### Changed
 
-- An order-of-magnitude performance improvement in line splitting, thanks to
-  Viktor Dukhovni. [#18]
+- **The `ByteString` type has been renamed to `ByteStream`**. This fixes a
+  well-reported confusion from users. An alias to the old name has been provided
+  for back-compatibility, but is deprecated and be removed in the next major
+  release.
+- **Modules have been renamed** to match the precedent set by the main
+  `streaming` library. Aliases to the old names have been provided, but will be
+  removed in the next major release.
+  - `Data.ByteString.Streaming` -> `Streaming.ByteString`
+  - `Data.ByteString.Streaming.Char8` -> `Streaming.ByteString.Char8`
+- An order-of-magnitude performance improvement in line splitting. [#18]
+- Performance and correctness improvements for the `readInt` function. [#31]
 - Documentation improved, and docstring coverage is now 100%. [#27]
 
 #### Fixed
@@ -18,6 +34,7 @@
 [#22]: https://github.com/haskell-streaming/streaming-bytestring/pull/22
 [#4]: https://github.com/haskell-streaming/streaming-bytestring/issues/4
 [#27]: https://github.com/haskell-streaming/streaming-bytestring/pull/27
+[#31]: https://github.com/haskell-streaming/streaming-bytestring/pull/31
 
 ## 0.1.6
 
