@@ -1,4 +1,4 @@
-## 0.1.7 (2020-10-05)
+## 0.1.7 (2020-10-14)
 
 Thanks to Viktor Dukhovni and Colin Woodbury for their contributions to this release.
 
