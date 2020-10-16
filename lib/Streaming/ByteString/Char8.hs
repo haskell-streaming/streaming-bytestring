@@ -730,14 +730,14 @@ skipSomeWS = go 0
     go _ r                      = r
 
 -- | Try to read an 'Int' value from the 'ByteString', returning
--- @m (Compose -- (Just val :> str))@ on success, where @val@ is the
--- value read and @str@ is the rest of the input stream.  If the stream
--- of digits decodes to a value larger than can be represented by an
--- 'Int', the returned value will be @m (Compose (Nothing :> str))@,
--- where the content of @str@ is the same as the original stream, but
--- some of the monadic effects may already have taken place, so the
--- original stream MUST NOT be used.  To read the remaining data, you
--- MUST use the returned @str@.
+-- @m (Compose (Just val :> str))@ on success, where @val@ is the value
+-- read and @str@ is the rest of the input stream.  If the stream of
+-- digits decodes to a value larger than can be represented by an 'Int',
+-- the returned value will be @m (Compose (Nothing :> str))@, where the
+-- content of @str@ is the same as the original stream, but some of the
+-- monadic effects may already have taken place, so the original stream
+-- MUST NOT be used.  To read the remaining data, you MUST use the
+-- returned @str@.
 --
 -- This function will not read an /unreasonably/ long stream of leading
 -- zero digits when trying to decode a number.  When reading the first

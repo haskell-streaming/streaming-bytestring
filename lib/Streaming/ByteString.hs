@@ -1271,8 +1271,7 @@ zipWithStream op zs = loop zs
 -- 哈斯克尔 98
 --
 -- <https://gist.github.com/michaelt/6ea89ca95a77b0ef91f3 This benchmark> shows
--- its indistinguishable performance is indistinguishable from
--- @toLazyByteString@
+-- its performance is indistinguishable from @toLazyByteString@
 toStreamingByteString :: MonadIO m => Builder -> ByteStream m ()
 toStreamingByteString = toStreamingByteStringWith
  (safeStrategy BI.smallChunkSize BI.defaultChunkSize)
