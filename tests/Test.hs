@@ -314,6 +314,19 @@ readIntCases = do
        $ addEffect cnt
        $ QI.Empty 16
   check cnt res Nothing (smin10 :> 16)
+  -- maxBound with cross-chunk overflow
+  IOR.writeIORef cnt 4
+  res <- readIntSkip
+       $ QI.Chunk " \t\n\v\f\r\xa0"
+       $ addEffect cnt
+       $ QI.Chunk (B.take 4 smax)
+       $ addEffect cnt
+       $ QI.Chunk (B.drop 4 smax)
+       $ addEffect cnt
+       $ QI.Chunk "00"
+       $ addEffect cnt
+       $ QI.Empty 17
+  check cnt res Nothing (smax `B.append` "00" :> 17)
   where
     -- Count down to zero from initial value
     readIntSkip = Q8.readInt . Q8.skipSomeWS
