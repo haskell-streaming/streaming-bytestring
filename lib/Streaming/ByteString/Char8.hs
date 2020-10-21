@@ -795,9 +795,13 @@ readInt = start
             Chunk c cs
                 | !l <- B.length c
                 , l > 0 -> case accumWord acc c of
-                     (0, !_, !_)
+                     (0, !_, !inrange)
+                         | inrange
                            -- no more digits found
                            -> result nbytes acc str
+                         | otherwise
+                           -- Overlow on first digit of chunk
+                           -> overflow nbytes acc str
                      (!n, !a, !inrange)
                          | False <- inrange
                            -- result out of 'Int' range
