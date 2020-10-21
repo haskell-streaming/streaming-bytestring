@@ -1,3 +1,11 @@
+## Unreleased
+
+#### Fixed
+
+- An edge case involving overflow in `readInt`. [#43]
+
+[#43]: https://github.com/haskell-streaming/streaming-bytestring/pull/43
+
 ## 0.1.7 (2020-10-14)
 
 Thanks to Viktor Dukhovni and Colin Woodbury for their contributions to this release.
