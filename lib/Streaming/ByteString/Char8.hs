@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns        #-}
 
 -- |
 -- Module      : Streaming.ByteString.Char8
@@ -305,17 +306,22 @@ groupBy :: Monad m => (Char -> Char -> Bool) -> ByteStream m r -> Stream (ByteSt
 groupBy rel = Q.groupBy (\w w' -> rel (w2c w) (w2c w'))
 {-# INLINE groupBy #-}
 
--- | /O(1)/ Extract the head and tail of a ByteStream, returning Nothing
--- if it is empty.
+-- | /O(1)/ Extract the head and tail of a 'ByteStream', or its return value if
+-- it is empty. This is the \'natural\' uncons for an effectful byte stream.
 uncons :: Monad m => ByteStream m r -> m (Either r (Char, ByteStream m r))
+uncons (Chunk c@(B.length -> len) cs)
+    | len > 0    = let !h = w2c $ B.unsafeHead c
+                       !t = if len > 1 then Chunk (B.unsafeTail c) cs else cs
+                    in return $ Right (h, t)
+    | otherwise  = uncons cs
+uncons (Go m)    = m >>= uncons
 uncons (Empty r) = return (Left r)
-uncons (Chunk c cs)
-    = return $ Right (w2c (B.unsafeHead c)
-                     , if B.length c == 1
-                         then cs
-                         else Chunk (B.unsafeTail c) cs )
-uncons (Go m) = m >>= uncons
 {-# INLINABLE uncons #-}
+
+nextChar :: Monad m => ByteStream m r -> m (Either r (Char, ByteStream m r))
+nextChar = uncons
+{-# INLINABLE nextChar #-}
+{-# DEPRECATED nextChar "Use uncons instead." #-}
 
 -- ---------------------------------------------------------------------
 -- Transformations
@@ -660,15 +666,6 @@ count_ c = Q.count_ (c2w c)
 count :: Monad m => Char -> ByteStream m r -> m (Of Int r)
 count c = Q.count (c2w c)
 {-# INLINE count #-}
-
--- | /O(1)/ Extract the head and tail of a 'ByteStream', or its return value if
--- it is empty. This is the \'natural\' uncons for an effectful byte stream.
-nextChar :: Monad m => ByteStream m r -> m (Either r (Char, ByteStream m r))
-nextChar b = do
-  e <- Q.nextByte b
-  case e of
-    Left r       -> return $! Left r
-    Right (w,bs) -> return $! Right (w2c w, bs)
 
 -- | Print a stream of bytes to STDOUT.
 putStr :: MonadIO m => ByteStream m r -> m r

@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs        #-}
 {-# LANGUAGE LambdaCase   #-}
 {-# LANGUAGE RankNTypes   #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- |
 -- Module      : Streaming.ByteString
@@ -560,49 +561,38 @@ head (Chunk c rest) = case B.uncons c of
 head (Go m)      = m >>= head
 {-# INLINABLE head #-}
 
--- | /O(1)/ Extract the head and tail of a 'ByteStream', or 'Nothing' if it is
--- empty.
-uncons :: Monad m => ByteStream m r -> m (Maybe (Word8, ByteStream m r))
-uncons (Empty _) = return Nothing
-uncons (Chunk c cs)
-    = return $ Just (B.unsafeHead c
-                     , if B.length c == 1
-                         then cs
-                         else Chunk (B.unsafeTail c) cs )
-uncons (Go m) = m >>= uncons
-{-# INLINABLE uncons #-}
-
 -- | /O(1)/ Extract the head and tail of a 'ByteStream', or its return value if
 -- it is empty. This is the \'natural\' uncons for an effectful byte stream.
+uncons :: Monad m => ByteStream m r -> m (Either r (Word8, ByteStream m r))
+uncons (Chunk c@(B.length -> len) cs)
+    | len > 0    = let !h = B.unsafeHead c
+                       !t = if len > 1 then Chunk (B.unsafeTail c) cs else cs
+                    in return $ Right (h, t)
+    | otherwise  = uncons cs
+uncons (Go m)    = m >>= uncons
+uncons (Empty r) = return (Left r)
+{-# INLINABLE uncons #-}
+
 nextByte :: Monad m => ByteStream m r -> m (Either r (Word8, ByteStream m r))
-nextByte (Empty r) = return (Left r)
-nextByte (Chunk c cs)
-    = if B.null c
-        then nextByte cs
-        else return $ Right (B.unsafeHead c
-                     , if B.length c == 1
-                         then cs
-                         else Chunk (B.unsafeTail c) cs )
-nextByte (Go m) = m >>= nextByte
+nextByte = uncons
 {-# INLINABLE nextByte #-}
+{-# DEPRECATED nextByte "Use uncons instead." #-}
 
 -- | Like `uncons`, but yields the entire first `B.ByteString` chunk that the
--- stream is holding onto. If there wasn't one, it tries to fetch it.
-unconsChunk :: Monad m => ByteStream m r -> m (Maybe (B.ByteString, ByteStream m r))
-unconsChunk (Empty _)    = return Nothing
-unconsChunk (Chunk c cs) = return (Just (c,cs))
-unconsChunk (Go m)       = m >>= unconsChunk
+-- stream is holding onto. If there wasn't one, it tries to fetch it.  Yields
+-- the final @r@ return value when the 'ByteStream' is empty.
+unconsChunk :: Monad m => ByteStream m r -> m (Either r (B.ByteString, ByteStream m r))
+unconsChunk (Chunk c cs)
+  | B.null c = unconsChunk cs
+  | otherwise = return (Right (c,cs))
+unconsChunk (Go m) = m >>= unconsChunk
+unconsChunk (Empty r) = return (Left r)
 {-# INLINABLE unconsChunk #-}
 
--- | Similar to `unconsChunk`, but yields the final @r@ return value when there
--- is no subsequent chunk.
 nextChunk :: Monad m => ByteStream m r -> m (Either r (B.ByteString, ByteStream m r))
-nextChunk (Empty r) = return (Left r)
-nextChunk (Go m) = m >>= nextChunk
-nextChunk (Chunk c cs)
-  | B.null c = nextChunk cs
-  | otherwise = return (Right (c,cs))
+nextChunk = unconsChunk
 {-# INLINABLE nextChunk #-}
+{-# DEPRECATED nextChunk "Use unconsChunk instead." #-}
 
 -- | /O(n\/c)/ Extract the last element of a 'ByteStream', which must be finite
 -- and non-empty.

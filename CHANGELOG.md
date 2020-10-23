@@ -7,6 +7,16 @@
 - Switch names of `fold` and `fold_` in the non-`Char8` modules.  The
   corresponding `Char8` functions and the rest of the library uses `_`
   for the variant that forgets the `r` value.
+- Unify `Streaming.ByteString.nextByte` and `uncons`.  The old `uncons`
+  returned `Maybe` instead of the more natural `Either r`.  It also did not
+  handle empty chunks correctly.  A deprecated alias `nextByte = uncons`
+  is retained to facilitate migration to the new improved `uncons`.
+- Unify `Streaming.ByteString.Char8.nextChar` and `uncons`.  The old `uncons`
+  did not handle empty chunks correctly.  A deprecated alias of `nextChar`
+  is retained to facilitate migration to the new improved `uncons`.
+- Unify `unconsChunk` and `nextChunk`.  The old `unconsChunk` returned
+  `Maybe` instead of the more natural `Either r`.  A deprecated alias is
+  retained to facilitate migration to the new improved `unconsChunk`.
 
 #### Fixed [#42]
 
