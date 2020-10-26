@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 ## 0.2.0 (2020-10-26)
 
 **Note:** The deprecations added in `0.1.7` have *not* been removed in this
@@ -21,11 +20,10 @@ place.
 - Relaxed signature of `toStrict_` to allow any `r`, not just `()`.
 - Permance improvements for `packChars` and `denull`.
 - Various documentation improvements.
-- Improved performance of w8IsSpace to more quickly filter out non-whitespace
+- Improved performance of `w8IsSpace` to more quickly filter out non-whitespace
   characters, and updated `words` to use it instead of the internal function
-  `isSpaceWord8` from the `bytestring` package.  (A future version of that
-  package will likely have the same implementation once
-  [PR 315](https://github.com/haskell/bytestring/pull/315) in that package is merged).
+  `isSpaceWord8` from the `bytestring` package. See also
+  [bytestring#315](https://github.com/haskell/bytestring/pull/315).
 
 #### Fixed
 
