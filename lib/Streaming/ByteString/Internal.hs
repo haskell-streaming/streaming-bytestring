@@ -19,16 +19,16 @@
 module Streaming.ByteString.Internal
   ( ByteStream(..)
   , ByteString
-  , consChunk         -- :: ByteString -> ByteStream m r -> ByteStream m r
-  , chunkOverhead     -- :: Int
-  , defaultChunkSize  -- :: Int
-  , materialize       -- :: (forall x. (r -> x) -> (ByteString -> x -> x) -> (m x -> x) -> x) -> ByteStream m r
-  , dematerialize     -- :: Monad m =>  ByteStream m r -> forall x.  (r -> x) -> (ByteString -> x -> x) -> (m x -> x) -> x
-  , foldrChunks       -- :: Monad m =>  (ByteString -> a -> a) -> a -> ByteStream m r -> m a
-  , foldlChunks       -- :: Monad m =>  (a -> ByteString -> a) -> a -> ByteStream m r -> m a
+  , consChunk
+  , chunkOverhead
+  , defaultChunkSize
+  , materialize
+  , dematerialize
+  , foldrChunks
+  , foldlChunks
 
-  , foldrChunksM      -- :: Monad m => (ByteString -> m a -> m a) -> m a -> ByteStream m r -> m a
-  , foldlChunksM      -- :: Monad m => (ByteString -> m a -> m a) -> m a -> ByteStream m r -> m a
+  , foldrChunksM
+  , foldlChunksM
   , chunkFold
   , chunkFoldM
   , chunkMap
@@ -38,10 +38,10 @@ module Streaming.ByteString.Internal
   , unfoldrChunks
 
   , packChars
-  , smallChunkSize   -- :: Int
-  , unpackBytes      -- :: Monad m => ByteStream m r -> Stream (Of Word8) m r
   , packBytes
-  , chunk            -- :: ByteString -> ByteStream m ()
+  , unpackBytes
+  , chunk
+  , smallChunkSize
   , mwrap
   , unfoldrNE
   , reread
@@ -81,13 +81,13 @@ import           Data.String
 import           Foreign.ForeignPtr (withForeignPtr)
 import           Foreign.Ptr
 import           Foreign.Storable
-import           GHC.Exts (SpecConstrAnnotation(..))
+import           GHC.Types (SPEC(..))
 
 import           Data.Functor.Identity
 import           Data.Word
 import           GHC.Base (realWorld#)
 import           GHC.IO (IO(IO))
-import           System.IO.Unsafe
+import           System.IO.Unsafe (unsafePerformIO)
 
 import           Control.Monad.Base
 import           Control.Monad.Catch (MonadCatch(..))
@@ -215,9 +215,6 @@ bracketByteString alloc free inside = do
         Chunk bs rest -> Chunk bs (loop rest)
 {-# INLINABLE bracketByteString #-}
 
-data SPEC = SPEC | SPEC2
-{-# ANN type SPEC ForceSpecConstr #-}
-
 -- -- ------------------------------------------------------------------------
 --
 -- | Smart constructor for 'Chunk'.
@@ -234,7 +231,7 @@ chunk bs = consChunk bs (Empty ())
 
 
 {- | Reconceive an effect that results in an effectful bytestring as an effectful bytestring.
-    Compare Streaming.mwrap. The closes equivalent of
+    Compare Streaming.mwrap. The closest equivalent of
 
 >>> Streaming.wrap :: f (Stream f m r) -> Stream f m r
 
@@ -316,14 +313,17 @@ chunkOverhead = 2 * sizeOf (undefined :: Int)
 --             assert (l' <= l) $ return (B.PS fp 0 l', res)
 -- {-# INLINABLE packBytes' #-}
 
+-- | Convert a `Stream` of pure `Word8` into a chunked 'ByteStream'.
 packBytes :: Monad m => Stream (Of Word8) m r -> ByteStream m r
 packBytes cs0 = do
+  -- XXX: Why 32?  It seems like a rather small chunk size, wouldn't
+  -- smallChunkSize make a better choice?
   (bytes :> rest) <- lift $ SP.toList $ SP.splitAt 32 cs0
   case bytes of
     [] -> case rest of
       Return r -> Empty r
       Step as  -> packBytes (Step as)  -- these two pattern matches
-      Effect m -> Go $ fmap packBytes m -- should be evaded.
+      Effect m -> Go $ fmap packBytes m -- should be avoided.
     _  -> Chunk (B.packBytes bytes) (packBytes rest)
 {-# INLINABLE packBytes #-}
 
@@ -331,7 +331,21 @@ packBytes cs0 = do
 --
 -- /Note:/ Each `Char` value is truncated to 8 bits.
 packChars :: Monad m => Stream (Of Char) m r -> ByteStream m r
-packChars = packBytes . SP.map B.c2w
+packChars str = do
+  -- XXX: Why 32?  It seems like a rather small chunk size, wouldn't
+  -- smallChunkSize make a better choice?
+  --
+  -- We avoid the cost of converting the stream of Chars to a stream
+  -- of Word8 (passed to packBytes), and instead pass the original
+  -- `Char` arrays to 'B.packChars', which will be more efficient,
+  -- the conversion there will be essentially free.
+  (chars :> rest) <- lift $ SP.toList $ SP.splitAt 32 str
+  case chars of
+    [] -> case rest of
+      Return r -> Empty r
+      Step as  -> packChars (Step as)  -- these two pattern matches
+      Effect m -> Go $ fmap packChars m -- should be avoided.
+    _  -> Chunk (B.packChars chars) (packChars rest)
 {-# INLINABLE packChars #-}
 
 -- | The reverse of `packChars`. Given a stream of bytes, produce a `Stream`
@@ -340,8 +354,8 @@ unpackBytes :: Monad m => ByteStream m r -> Stream (Of Word8) m r
 unpackBytes bss = dematerialize bss Return unpackAppendBytesLazy Effect
   where
   unpackAppendBytesLazy :: B.ByteString -> Stream (Of Word8) m r -> Stream (Of Word8) m r
-  unpackAppendBytesLazy (B.PS fp off len) xs
-    | len <= 100 = unpackAppendBytesStrict (B.PS fp off len) xs
+  unpackAppendBytesLazy b@(B.PS fp off len) xs
+    | len <= 100 = unpackAppendBytesStrict b xs
     | otherwise  = unpackAppendBytesStrict (B.PS fp off 100) remainder
     where
       remainder  = unpackAppendBytesLazy (B.PS fp (off+100) (len-100)) xs
@@ -351,11 +365,11 @@ unpackBytes bss = dematerialize bss Return unpackAppendBytesLazy Effect
     B.accursedUnutterablePerformIO $ withForeignPtr fp $ \base ->
       loop (base `plusPtr` (off-1)) (base `plusPtr` (off-1+len)) xs
     where
-      loop !sentinal !p acc
-        | p == sentinal = return acc
+      loop !sentinel !p acc
+        | p == sentinel = return acc
         | otherwise     = do
             x <- peek p
-            loop sentinal (p `plusPtr` (-1)) (Step (x :> acc))
+            loop sentinel (p `plusPtr` (-1)) (Step (x :> acc))
 {-# INLINABLE unpackBytes #-}
 
 -- | Copied from Data.ByteString.Unsafe for compatibility with older bytestring.
@@ -478,16 +492,18 @@ unfoldrChunks step = loop where
       Right (bs,s') -> return $ Chunk bs (loop s')
 {-# INLINABLE unfoldrChunks #-}
 
--- | Stream chunks from something that contains @IO (Maybe ByteString)@ until it
+-- | Stream chunks from something that contains @m (Maybe ByteString)@ until it
 -- returns 'Nothing'. 'reread' is of particular use rendering @io-streams@ input
 -- streams as byte streams in the present sense.
 --
--- > Q.reread Streams.read            :: InputStream B.ByteString -> Q.ByteString IO ()
--- > Q.reread (liftIO . Streams.read) :: MonadIO m => InputStream B.ByteString -> Q.ByteString m ()
+-- > import qualified Data.ByteString as B
+-- > import qualified System.IO.Streams as S
+-- > Q.reread S.read            :: S.InputStream B.ByteString -> Q.ByteStream IO ()
+-- > Q.reread (liftIO . S.read) :: MonadIO m => S.InputStream B.ByteString -> Q.ByteStream m ()
 --
 -- The other direction here is
 --
--- > Streams.unfoldM Q.unconsChunk    :: Q.ByteString IO r -> IO (InputStream B.ByteString)
+-- > S.unfoldM Q.unconsChunk    :: Q.ByteString IO r -> IO (S.InputStream B.ByteString)
 reread :: Monad m => (s -> m (Maybe B.ByteString)) -> s -> ByteStream m ()
 reread step s = loop where
   loop = Go $ do
@@ -525,8 +541,9 @@ hello!
 world!
 >>> :! cat hello1.txt
 hello
-
+<BLANKLINE>
 world
+<BLANKLINE>
 
     As with the parallel operations in @Streaming.Prelude@, we have
 
