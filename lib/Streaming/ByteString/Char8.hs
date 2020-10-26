@@ -318,6 +318,7 @@ uncons (Go m)    = m >>= uncons
 uncons (Empty r) = return (Left r)
 {-# INLINABLE uncons #-}
 
+-- | The same as `uncons`, will be removed in the next version.
 nextChar :: Monad m => ByteStream m r -> m (Either r (Char, ByteStream m r))
 nextChar = uncons
 {-# INLINABLE nextChar #-}

@@ -573,6 +573,7 @@ uncons (Go m)    = m >>= uncons
 uncons (Empty r) = return (Left r)
 {-# INLINABLE uncons #-}
 
+-- | The same as `uncons`, will be removed in the next version.
 nextByte :: Monad m => ByteStream m r -> m (Either r (Word8, ByteStream m r))
 nextByte = uncons
 {-# INLINABLE nextByte #-}
@@ -589,6 +590,7 @@ unconsChunk (Go m) = m >>= unconsChunk
 unconsChunk (Empty r) = return (Left r)
 {-# INLINABLE unconsChunk #-}
 
+-- | The same as `unconsChunk`, will be removed in the next version.
 nextChunk :: Monad m => ByteStream m r -> m (Either r (B.ByteString, ByteStream m r))
 nextChunk = unconsChunk
 {-# INLINABLE nextChunk #-}
