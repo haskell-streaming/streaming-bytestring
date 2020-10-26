@@ -199,6 +199,7 @@ import           Streaming.ByteString
     toStreamingByteString, toStreamingByteStringWith, toStrict, toStrict_,
     unconsChunk, writeFile, zipWithStream)
 
+import           Data.Bits ((.&.))
 import           Data.Word (Word8)
 import           Foreign.ForeignPtr (withForeignPtr)
 import           Foreign.Ptr
@@ -541,7 +542,7 @@ unlines = loop where
 -- can write @mapped toStrict . words@ or the like, if strict bytestrings are
 -- needed.
 words :: Monad m => ByteStream m r -> Stream (ByteStream m) m r
-words = filtered . Q.splitWith B.isSpaceWord8
+words = filtered . Q.splitWith w8IsSpace
  where
   filtered stream = case stream of
     Return r -> Return r
@@ -698,10 +699,11 @@ w8IsSpace = \ !w8 ->
     -- the conversion from Word8 to Word is free.
     let w :: Word
         !w = fromIntegral w8
-     in w - 0x21 > 0x7e   -- not [x21..0x9f]
-        && ( w == 0x20    -- SP
-          || w - 0x09 < 5 -- HT, NL, VT, FF, CR
-          || w == 0xa0 )  -- NBSP
+     in w .&. 0x50 == 0    -- Quick non-wsp filter
+        && w - 0x21 > 0x7e -- 2nd non-wsp filter
+        && ( w == 0x20     -- SP
+          || w - 0x09 < 5  -- HT, NL, VT, FF, CR
+          || w == 0xa0 )   -- NBSP
 {-# INLINE w8IsSpace #-}
 
 -- | Try to position the stream at the next non-whitespace input, by
