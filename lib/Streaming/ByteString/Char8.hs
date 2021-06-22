@@ -201,7 +201,6 @@ import           Streaming.ByteString
 
 import           Data.Bits ((.&.))
 import           Data.Word (Word8)
-import           Foreign.ForeignPtr (withForeignPtr)
 import           Foreign.Ptr
 import           Foreign.Storable
 import qualified System.IO as IO
@@ -222,7 +221,7 @@ unpack bs = case bs of
 
   unpackAppendCharsStrict :: B.ByteString -> Stream (Of Char) m r -> Stream (Of Char) m r
   unpackAppendCharsStrict (B.PS fp off len) xs =
-    B.accursedUnutterablePerformIO $ withForeignPtr fp $ \base -> do
+    B.accursedUnutterablePerformIO $ unsafeWithForeignPtr fp $ \base -> do
          loop (base `plusPtr` (off-1)) (base `plusPtr` (off-1+len)) xs
      where
        loop !sentinal !p acc
@@ -628,7 +627,7 @@ nthNewLine :: B.ByteString   -- input chunk
            -> Int            -- remaining number of newlines wanted
            -> Either Int Int -- Left count, else Right length
 nthNewLine (B.PS fp off len) targetLines =
-    B.accursedUnutterablePerformIO $ withForeignPtr fp $ \base ->
+    B.accursedUnutterablePerformIO $ unsafeWithForeignPtr fp $ \base ->
     loop (base `plusPtr` off) targetLines 0 len
   where
     loop :: Ptr Word8 -> Int -> Int -> Int -> IO (Either Int Int)
@@ -823,7 +822,7 @@ readInt = start
         -- the provided digits (end of input or non-digit encountered).
         accumWord acc (B.PS fp off len) =
             B.accursedUnutterablePerformIO $ do
-                withForeignPtr fp $ \p -> do
+                unsafeWithForeignPtr fp $ \p -> do
                     let ptr = p `plusPtr` off
                         end = ptr `plusPtr` len
                     x@(!_, !_, !_) <- if positive
