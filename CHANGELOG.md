@@ -1,6 +1,12 @@
+## 0.2.1 (2021-06-23)
+
+#### Changed
+
+- Performance improvement when using GHC 9.
+
 ## 0.2.0 (2020-10-26)
 
-**Note:** The deprecations added in `0.1.7` have *not* been removed in this
+**Note:** The deprecations added in `0.1.7` have _not_ been removed in this
 version. Instead of `0.1.7`, that release should have been `0.2` in the first
 place.
 
