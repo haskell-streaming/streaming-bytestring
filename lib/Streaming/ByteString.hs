@@ -209,7 +209,6 @@ import           Control.Monad.Trans.Resource
 import           Data.Int (Int64)
 import qualified Data.List as L
 import           Data.Word (Word8)
-import           Foreign.ForeignPtr (withForeignPtr)
 import           Foreign.Ptr
 import           Foreign.Storable
 import           System.IO (Handle, IOMode(..), hClose, openBinaryFile)
@@ -659,7 +658,7 @@ intersperse w (Chunk c cs) | B.null c = intersperse w cs
                                  (dematerialize cs Empty (Chunk . intersperse') Go)
   where intersperse' :: P.ByteString -> P.ByteString
         intersperse' (B.PS fp o l)
-          | l > 0 = B.unsafeCreate (2*l) $ \p' -> withForeignPtr fp $ \p -> do
+          | l > 0 = B.unsafeCreate (2*l) $ \p' -> unsafeWithForeignPtr fp $ \p -> do
               poke p' w
               B.c_intersperse (p' `plusPtr` 1) (p `plusPtr` o) (fromIntegral l) w
           | otherwise = B.empty

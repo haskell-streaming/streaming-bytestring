@@ -52,6 +52,9 @@ module Streaming.ByteString.Internal
 
     -- * ResourceT help
   , bracketByteString
+
+    -- * Re-export from GHC 9.0
+  , unsafeWithForeignPtr
   ) where
 
 import           Control.Monad
@@ -78,7 +81,6 @@ import           Streaming.Internal hiding (concats)
 import qualified Streaming.Prelude as SP
 
 import           Data.String
-import           Foreign.ForeignPtr (withForeignPtr)
 import           Foreign.Ptr
 import           Foreign.Storable
 import           GHC.Types (SPEC(..))
@@ -92,6 +94,18 @@ import           System.IO.Unsafe (unsafePerformIO)
 import           Control.Monad.Base
 import           Control.Monad.Catch (MonadCatch(..))
 import           Control.Monad.Trans.Resource
+
+#if MIN_VERSION_base(4,15,0)
+import           GHC.ForeignPtr (unsafeWithForeignPtr)
+#else
+import           Foreign.ForeignPtr (ForeignPtr, withForeignPtr)
+#endif
+
+#if !MIN_VERSION_base(4,15,0)
+-- | Synonym of 'withForeignPtr' for GHC prior to 9.0.
+unsafeWithForeignPtr :: ForeignPtr a -> (Ptr a -> IO b) -> IO b
+unsafeWithForeignPtr = withForeignPtr
+#endif
 
 -- | A type alias for back-compatibility.
 type ByteString = ByteStream
@@ -362,7 +376,7 @@ unpackBytes bss = dematerialize bss Return unpackAppendBytesLazy Effect
 
   unpackAppendBytesStrict :: B.ByteString -> Stream (Of Word8) m r -> Stream (Of Word8) m r
   unpackAppendBytesStrict (B.PS fp off len) xs =
-    B.accursedUnutterablePerformIO $ withForeignPtr fp $ \base ->
+    B.accursedUnutterablePerformIO $ unsafeWithForeignPtr fp $ \base ->
       loop (base `plusPtr` (off-1)) (base `plusPtr` (off-1+len)) xs
     where
       loop !sentinel !p acc
@@ -375,7 +389,7 @@ unpackBytes bss = dematerialize bss Return unpackAppendBytesLazy Effect
 -- | Copied from Data.ByteString.Unsafe for compatibility with older bytestring.
 unsafeLast :: B.ByteString -> Word8
 unsafeLast (B.PS x s l) =
-    accursedUnutterablePerformIO $ withForeignPtr x $ \p -> peekByteOff p (s+l-1)
+    accursedUnutterablePerformIO $ unsafeWithForeignPtr x $ \p -> peekByteOff p (s+l-1)
  where
       accursedUnutterablePerformIO (IO m) = case m realWorld# of (# _, r #) -> r
 {-# INLINE unsafeLast #-}
@@ -568,7 +582,7 @@ copy = loop where
 findIndexOrEnd :: (Word8 -> Bool) -> B.ByteString -> Int
 findIndexOrEnd k (B.PS x s l) =
     B.accursedUnutterablePerformIO $
-      withForeignPtr x $ \f -> go (f `plusPtr` s) 0
+      unsafeWithForeignPtr x $ \f -> go (f `plusPtr` s) 0
   where
     go !ptr !n | n >= l    = return l
                | otherwise = do w <- peek ptr
