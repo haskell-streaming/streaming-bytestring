@@ -133,18 +133,18 @@ instance Monad m => Applicative (ByteStream m) where
   {-# INLINE pure #-}
   bf <*> bx = do {f <- bf; x <- bx; Empty (f x)}
   {-# INLINE (<*>) #-}
-  (*>) = (>>)
-  {-# INLINE (*>) #-}
-
-instance Monad m => Monad (ByteStream m) where
-  return = Empty
-  {-# INLINE return #-}
-  x0 >> y = loop SPEC x0 where
+  x0 *> y = loop SPEC x0 where
     loop !_ x = case x of   -- this seems to be insanely effective
       Empty _   -> y
       Chunk a b -> Chunk a (loop SPEC b)
       Go m      -> Go (fmap (loop SPEC) m)
-  {-# INLINEABLE (>>) #-}
+  {-# INLINEABLE (*>) #-}
+
+instance Monad m => Monad (ByteStream m) where
+  return = pure
+  {-# INLINE return #-}
+  (>>) = (*>)
+  {-# INLINE (>>) #-}
   x >>= f =
     -- case x of
     --   Empty a -> f a
@@ -189,7 +189,11 @@ instance (Semigroup r, Monad m) => Semigroup (ByteStream m r) where
 instance (Monoid r, Monad m) => Monoid (ByteStream m r) where
   mempty = Empty mempty
   {-# INLINE mempty #-}
+#if MIN_VERSION_base(4,11,0)
+  mappend = (<>)
+#else
   mappend = liftM2 mappend
+#endif
   {-# INLINE mappend #-}
 
 instance (MonadBase b m) => MonadBase b (ByteStream m) where
