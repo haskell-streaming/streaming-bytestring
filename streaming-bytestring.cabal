@@ -44,7 +44,7 @@ tested-with:
 
 source-repository head
   type:     git
-  location: https://github.com/michaelt/streaming-bytestring
+  location: https://github.com/haskell-streaming/streaming-bytestring
 
 library
   default-language: Haskell2010
