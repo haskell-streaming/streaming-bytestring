@@ -14,8 +14,8 @@ jobs:
       matrix:
         resolver:
           [
-            "nightly-2021-10-21",
-            "lts-18.18",
+            "nightly-2022-01-20",
+            "lts-18.22",
             "lts-16.31",
             "lts-14.27",
             "lts-12.26",
@@ -23,9 +23,9 @@ jobs:
             "lts-9.21",
           ]
         include:
-          - resolver: "nightly-2021-10-21"
-            ghc: "9.0.1"
-          - resolver: "lts-18.18"
+          - resolver: "nightly-2022-01-20"
+            ghc: "9.0.2"
+          - resolver: "lts-18.22"
             ghc: "8.10.7"
           - resolver: "lts-16.31"
             ghc: "8.8.4"
