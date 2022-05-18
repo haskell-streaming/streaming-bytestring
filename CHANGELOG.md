@@ -1,3 +1,9 @@
+## 0.2.2 (2022-05-18)
+
+#### Changed
+
+- Dependency adjustments.
+
 ## 0.2.1 (2021-06-23)
 
 #### Changed
