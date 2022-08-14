@@ -370,6 +370,11 @@ main = defaultMain $ testGroup "Tests"
         unpackToString (Q8.concat (Q8.lineSplit n (fromString str))) == str
     , testProperty "concat after lineSplit round trips (CRLF)" $ over ((,) <$> nats <~> strSeriesCrlf) $ \(n,str) ->
         unpackToString (Q8.concat (Q8.lineSplit n (fromString str))) == str
+    , testProperty "'for' is equivalent to the one in streaming" $ over chunksSeries $ \ss ->
+        let doubleStream b = S.each [b, b]
+            doubleByteStream b = Q.chunk b *> Q.chunk b
+        in unpackToString (Q.fromChunks (S.for (Q.toChunks (fromChunks ss)) doubleStream))
+           == unpackToString (Q.for (fromChunks ss) doubleByteStream)
     ]
   , testGroup "Unit Tests"
     [ testCase "hGetContents: Handle stays open" handleIsOpen

@@ -1,3 +1,9 @@
+## Unreleased
+
+#### Added
+
+- Add `for :: Monad m => ByteStream m r -> (P.ByteString -> ByteStream m r) -> ByteStream m r`
+
 ## 0.2.2 (2022-05-18)
 
 #### Changed
