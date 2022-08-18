@@ -1,6 +1,6 @@
 cabal-version:      >=1.10
 name:               streaming-bytestring
-version:            0.2.2
+version:            0.2.3
 synopsis:           Fast, effectful byte streams.
 description:
   This library enables fast and safe streaming of byte data, in either @Word8@ or
