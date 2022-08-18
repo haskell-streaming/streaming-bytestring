@@ -72,6 +72,7 @@ module Streaming.ByteString
 
     -- * Transforming ByteStreams
   , map
+  , for
   , intercalate
   , intersperse
 
@@ -638,6 +639,17 @@ append xs ys = dematerialize xs (const ys) Chunk Go
 map :: Monad m => (Word8 -> Word8) -> ByteStream m r -> ByteStream m r
 map f z = dematerialize z Empty (Chunk . B.map f) Go
 {-# INLINE map #-}
+
+-- | @'for' xs f@ applies @f@ to each chunk in the stream, and
+-- concatenates the resulting streams.
+--
+-- @since 0.2.3
+for :: Monad m => ByteStream m r -> (P.ByteString -> ByteStream m r) -> ByteStream m r
+for stream f = case stream of
+  Empty r -> Empty r
+  Chunk bs bss -> f bs *> for bss f
+  Go m -> Go ((`for` f) <$> m)
+{-# INLINE for #-}
 
 -- -- | /O(n)/ 'reverse' @xs@ returns the elements of @xs@ in reverse order.
 -- reverse :: ByteString -> ByteString
