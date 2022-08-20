@@ -643,8 +643,11 @@ map f z = dematerialize z Empty (Chunk . B.map f) Go
 -- | @'for' xs f@ applies @f@ to each chunk in the stream, and
 -- concatenates the resulting streams.
 --
+-- Generalised in 0.2.4 to match @streaming@: the callback's (ignored)
+-- return value can be of any type.
+--
 -- @since 0.2.3
-for :: Monad m => ByteStream m r -> (P.ByteString -> ByteStream m r) -> ByteStream m r
+for :: Monad m => ByteStream m r -> (P.ByteString -> ByteStream m x) -> ByteStream m r
 for stream f = case stream of
   Empty r -> Empty r
   Chunk bs bss -> f bs *> for bss f
