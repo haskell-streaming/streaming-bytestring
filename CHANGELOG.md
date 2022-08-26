@@ -1,9 +1,9 @@
-## Unreleased
+## 0.2.4 (2022-08-26)
 
 #### Changed
 
-- Changed `for`'s callback to return `ByteStream m x`, to clarify that
-  it is not used.
+- Changed `for`'s callback to return `ByteStream m x`, to clarify that it is not
+  used.
 
 ## 0.2.3 (2022-08-18)
 
