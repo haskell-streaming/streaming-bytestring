@@ -1,3 +1,8 @@
+## 0.2.5 (2023-01-05)
+
+- Tightened PVP version bounds, for GHC 7.10 through to GHC 9.4.4.
+  CI tests for 7.10 not presently implemented.
+
 ## 0.2.4 (2022-08-26)
 
 #### Changed

@@ -8,12 +8,14 @@ on:
 jobs:
   build:
     name: CI
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         resolver:
           [
+            "nightly-2023-01-03",
+            "lts-20.5",
             "lts-19.7",
             "lts-18.28",
             "lts-16.31",
@@ -23,20 +25,62 @@ jobs:
             "lts-9.21",
           ]
         include:
+          - resolver: "nightly-2023-01-03"
+            os: ubuntu-latest
+            ghc: "9.4.4"
+            cabal: latest
+            stack: latest
+          - resolver: "lts-20.5"
+            os: ubuntu-latest
+            ghc: "9.2.5"
+            cabal: latest
+            stack: latest
           - resolver: "lts-19.7"
+            os: ubuntu-latest
             ghc: "9.0.2"
+            cabal: latest
+            stack: latest
           - resolver: "lts-18.28"
+            os: ubuntu-latest
             ghc: "8.10.7"
+            cabal: latest
+            stack: latest
           - resolver: "lts-16.31"
+            os: ubuntu-latest
             ghc: "8.8.4"
+            cabal: latest
+            stack: latest
           - resolver: "lts-14.27"
+            os: ubuntu-latest
             ghc: "8.6.5"
+            cabal: latest
+            stack: latest
           - resolver: "lts-12.26"
+            os: ubuntu-latest
             ghc: "8.4.4"
+            cabal: latest
+            stack: latest
           - resolver: "lts-11.22"
+            os: ubuntu-latest
             ghc: "8.2.2"
+            cabal: latest
+            stack: latest
           - resolver: "lts-9.21"
+            os: ubuntu-latest
             ghc: "8.0.2"
+            cabal: latest
+            stack: latest
+          #
+          # The stock 7.10.3 compiler runs into compat issues with recent
+          # linkers that enable -fPIE by default.  Apparently the hvr ppa
+          # GHC has backported work-arounds for this, so perhaps possible
+          # to install it instead, but for now just punting on 7.10 tests
+          #
+          #   - resolver: "lts-6.35"
+          #     os: ubuntu-18.04
+          #     ghc: "7.10.3"
+          #     cabal: 2.2
+          #     stack: 1.6
 
     steps:
       - name: Setup GHC
@@ -44,7 +88,8 @@ jobs:
         with:
           ghc-version: ${{ matrix.ghc }}
           enable-stack: true
-          stack-version: "latest"
+          stack-version: ${{ matrix.stack }}
+          cabal-version: ${{ matrix.cabal }}
 
       - name: Clone project
         uses: actions/checkout@v3
