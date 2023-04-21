@@ -1,6 +1,6 @@
 cabal-version:      >=1.10
 name:               streaming-bytestring
-version:            0.2.4
+version:            0.3.0
 synopsis:           Fast, effectful byte streams.
 description:
   This library enables fast and safe streaming of byte data, in either @Word8@ or
@@ -69,7 +69,7 @@ library
     Unsafe
 
   build-depends:
-      base               >=4.8     && <5.0
+      base               >=4.9     && <5.0
     , bytestring         >=0.10.4  && <0.12
     , deepseq            >=1.4     && <1.5
     , exceptions         >=0.8     && <0.11
@@ -91,7 +91,7 @@ test-suite test
   hs-source-dirs:   tests
   main-is:          Test.hs
   build-depends:
-      base                  >=4.8     && <5
+      base                  >=4.9     && <5
     , bytestring            >=0.10.4  && <0.12
     , resourcet             >=1.1     && <1.4
     , smallcheck            >=1.1.1
