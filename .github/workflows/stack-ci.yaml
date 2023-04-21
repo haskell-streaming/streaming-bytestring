@@ -14,9 +14,9 @@ jobs:
       matrix:
         resolver:
           [
-            "nightly-2023-01-03",
-            "lts-20.5",
-            "lts-19.7",
+            "nightly-2023-04-21",
+            "lts-20.18",
+            "lts-19.33",
             "lts-18.28",
             "lts-16.31",
             "lts-14.27",
@@ -25,17 +25,17 @@ jobs:
             "lts-9.21",
           ]
         include:
-          - resolver: "nightly-2023-01-03"
+          - resolver: "nightly-2023-04-21"
             os: ubuntu-latest
             ghc: "9.4.4"
             cabal: latest
             stack: latest
-          - resolver: "lts-20.5"
+          - resolver: "lts-20.18"
             os: ubuntu-latest
             ghc: "9.2.5"
             cabal: latest
             stack: latest
-          - resolver: "lts-19.7"
+          - resolver: "lts-19.33"
             os: ubuntu-latest
             ghc: "9.0.2"
             cabal: latest
@@ -70,17 +70,6 @@ jobs:
             ghc: "8.0.2"
             cabal: latest
             stack: latest
-          #
-          # The stock 7.10.3 compiler runs into compat issues with recent
-          # linkers that enable -fPIE by default.  Apparently the hvr ppa
-          # GHC has backported work-arounds for this, so perhaps possible
-          # to install it instead, but for now just punting on 7.10 tests
-          #
-          #   - resolver: "lts-6.35"
-          #     os: ubuntu-18.04
-          #     ghc: "7.10.3"
-          #     cabal: 2.2
-          #     stack: 1.6
 
     steps:
       - name: Setup GHC
