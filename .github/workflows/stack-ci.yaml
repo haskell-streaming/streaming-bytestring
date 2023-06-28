@@ -14,8 +14,9 @@ jobs:
       matrix:
         resolver:
           [
-            "nightly-2023-04-21",
-            "lts-20.18",
+            "nightly-2023-06-27",
+            "lts-21.0",
+            "lts-20.26",
             "lts-19.33",
             "lts-18.28",
             "lts-16.31",
@@ -25,12 +26,17 @@ jobs:
             "lts-9.21",
           ]
         include:
-          - resolver: "nightly-2023-04-21"
+          - resolver: "nightly-2023-06-27"
             os: ubuntu-latest
-            ghc: "9.4.4"
+            ghc: "9.6.2"
             cabal: latest
             stack: latest
-          - resolver: "lts-20.18"
+          - resolver: "lts-21.0"
+            os: ubuntu-latest
+            ghc: "9.4.5"
+            cabal: latest
+            stack: latest
+          - resolver: "lts-20.26"
             os: ubuntu-latest
             ghc: "9.2.5"
             cabal: latest

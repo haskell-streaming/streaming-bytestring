@@ -1,4 +1,5 @@
-resolver: lts-20.18
+resolver: lts-21.0
 
 # ghc-options:
 #   $locals: -fmax-relevant-binds=0 -funclutter-valid-hole-fits -haddock
+
