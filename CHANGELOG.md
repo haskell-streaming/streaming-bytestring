@@ -1,4 +1,10 @@
 
+## 0.3.2 (2023-11-17)
+
+#### Changed
+
+- Ensure support for GHC 9.8.
+
 ## 0.3.1 (2023-06-28)
 
 #### Changed
