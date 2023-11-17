@@ -71,10 +71,10 @@ library
 
   build-depends:
       base               >=4.9     && <5.0
-    , bytestring         >=0.10.4  && <0.12
-    , deepseq            >=1.4     && <1.5
+    , bytestring         >=0.10.4  && <0.13
+    , deepseq            >=1.4     && <1.6
     , exceptions         >=0.8     && <0.11
-    , ghc-prim           >=0.4     && <0.11
+    , ghc-prim           >=0.4     && <0.12
     , mmorph             >=1.0     && <1.3
     , mtl                >=2.2     && <2.4
     , resourcet          >=1.1     && <1.4
@@ -93,7 +93,7 @@ test-suite test
   main-is:          Test.hs
   build-depends:
       base                  >=4.9     && <5
-    , bytestring            >=0.10.4  && <0.12
+    , bytestring            >=0.10.4  && <0.13
     , resourcet             >=1.1     && <1.4
     , smallcheck            >=1.1.1
     , streaming             >=0.1.4.0 && <0.3
