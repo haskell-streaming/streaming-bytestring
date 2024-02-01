@@ -8,14 +8,14 @@ on:
 jobs:
   build:
     name: CI
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         resolver:
           [
-            # "nightly-2023-06-27",
-            "lts-21.0",
+            "lts-22.8",
+            "lts-21.25",
             "lts-20.26",
             "lts-19.33",
             "lts-18.28",
@@ -26,56 +26,26 @@ jobs:
             "lts-9.21",
           ]
         include:
-          # - resolver: "nightly-2023-06-27"
-          #   os: ubuntu-latest
-          #   ghc: "9.6.2"
-          #   cabal: latest
-          #   stack: latest
-          - resolver: "lts-21.0"
-            os: ubuntu-latest
-            ghc: "9.4.5"
-            cabal: latest
-            stack: latest
+          - resolver: "lts-22.8"
+            ghc: "9.6.4"
+          - resolver: "lts-21.25"
+            ghc: "9.4.8"
           - resolver: "lts-20.26"
-            os: ubuntu-latest
             ghc: "9.2.5"
-            cabal: latest
-            stack: latest
           - resolver: "lts-19.33"
-            os: ubuntu-latest
             ghc: "9.0.2"
-            cabal: latest
-            stack: latest
           - resolver: "lts-18.28"
-            os: ubuntu-latest
             ghc: "8.10.7"
-            cabal: latest
-            stack: latest
           - resolver: "lts-16.31"
-            os: ubuntu-latest
             ghc: "8.8.4"
-            cabal: latest
-            stack: latest
           - resolver: "lts-14.27"
-            os: ubuntu-latest
             ghc: "8.6.5"
-            cabal: latest
-            stack: latest
           - resolver: "lts-12.26"
-            os: ubuntu-latest
             ghc: "8.4.4"
-            cabal: latest
-            stack: latest
           - resolver: "lts-11.22"
-            os: ubuntu-latest
             ghc: "8.2.2"
-            cabal: latest
-            stack: latest
           - resolver: "lts-9.21"
-            os: ubuntu-latest
             ghc: "8.0.2"
-            cabal: latest
-            stack: latest
 
     steps:
       - name: Setup GHC
@@ -83,8 +53,7 @@ jobs:
         with:
           ghc-version: ${{ matrix.ghc }}
           enable-stack: true
-          stack-version: ${{ matrix.stack }}
-          cabal-version: ${{ matrix.cabal }}
+          stack-version: "latest"
 
       - name: Clone project
         uses: actions/checkout@v4
