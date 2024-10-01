@@ -1,3 +1,10 @@
+# streaming-bytestring
+
+## 0.3.3 (2024-10-01)
+
+#### Fixed
+
+- A subtle bug involving conversion to lazy bytestrings.
 
 ## 0.3.2 (2023-11-17)
 
