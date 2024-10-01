@@ -189,11 +189,11 @@ import           Prelude hiding
     elem, filter, foldl, foldl1, foldr, foldr1, getContents, getLine, head,
     init, interact, iterate, last, length, lines, map, maximum, minimum,
     notElem, null, putStr, putStrLn, readFile, repeat, replicate, reverse,
-    scanl, scanl1, scanr, scanr1, span, splitAt, tail, take, takeWhile,
-    unlines, unzip, writeFile, zip, zipWith)
+    scanl, scanl1, scanr, scanr1, span, splitAt, tail, take, takeWhile, unlines,
+    unzip, writeFile, zip, zipWith)
 
-import qualified Data.ByteString as P (ByteString)
 import qualified Data.ByteString as B
+import qualified Data.ByteString as P (ByteString)
 import           Data.ByteString.Builder.Internal hiding
     (append, defaultChunkSize, empty, hPut)
 import qualified Data.ByteString.Internal as B
@@ -212,8 +212,8 @@ import qualified Data.List as L
 import           Data.Word (Word8)
 import           Foreign.Ptr
 import           Foreign.Storable
-import           System.IO (Handle, IOMode(..), hClose, openBinaryFile)
 import qualified System.IO as IO (stdin, stdout)
+import           System.IO (Handle, IOMode(..), hClose, openBinaryFile)
 import           System.IO.Error (illegalOperationErrorType, mkIOError)
 
 -- | /O(n)/ Concatenate a stream of byte streams.
@@ -329,10 +329,10 @@ fromLazy = BI.foldrChunks Chunk (Empty ())
 {-# INLINE fromLazy #-}
 
 -- | /O(n)/ Convert an effectful byte stream into a single lazy 'ByteStream'
--- with the same internal chunk structure. See `toLazy` which preserve
--- connectedness by keeping the return value of the effectful bytestring.
+-- with the same internal chunk structure. See `toLazy` which preserves
+-- connectness by keeping the return value of the effectful bytestring.
 toLazy_ :: Monad m => ByteStream m r -> m BI.ByteString
-toLazy_ bs = dematerialize bs (\_ -> return BI.Empty) (fmap . BI.Chunk) join
+toLazy_ bs = dematerialize bs (\_ -> return BI.Empty) (fmap . BI.chunk) join
 {-# INLINE toLazy_ #-}
 
 -- | /O(n)/ Convert an effectful byte stream into a single lazy 'ByteString'
@@ -357,7 +357,7 @@ toLazy bs0 = dematerialize bs0
                 (\r -> return (BI.Empty :> r))
                 (\b mx -> do
                       (bs :> x) <- mx
-                      return $ BI.Chunk b bs :> x
+                      return $ BI.chunk b bs :> x
                       )
                 join
 {-# INLINE toLazy #-}
@@ -649,9 +649,9 @@ map f z = dematerialize z Empty (Chunk . B.map f) Go
 -- @since 0.2.3
 for :: Monad m => ByteStream m r -> (P.ByteString -> ByteStream m x) -> ByteStream m r
 for stream f = case stream of
-  Empty r -> Empty r
+  Empty r      -> Empty r
   Chunk bs bss -> f bs *> for bss f
-  Go m -> Go ((`for` f) <$> m)
+  Go m         -> Go ((`for` f) <$> m)
 {-# INLINE for #-}
 
 -- -- | /O(n)/ 'reverse' @xs@ returns the elements of @xs@ in reverse order.
@@ -1343,9 +1343,9 @@ toStreamingByteStringWith strategy builder0 = do
 concatBuilders :: Stream (Of Builder) IO () -> Builder
 concatBuilders p = builder $ \bstep r -> do
   case p of
-    Return _          -> runBuilderWith mempty bstep r
-    Step (b :> rest)  -> runBuilderWith (b `mappend` concatBuilders rest) bstep r
-    Effect m          -> m >>= \p' -> runBuilderWith (concatBuilders p') bstep r
+    Return _         -> runBuilderWith mempty bstep r
+    Step (b :> rest) -> runBuilderWith (b `mappend` concatBuilders rest) bstep r
+    Effect m         -> m >>= \p' -> runBuilderWith (concatBuilders p') bstep r
 {-# INLINABLE concatBuilders #-}
 
 -- | A simple construction of a builder from a 'ByteString'.

@@ -5,6 +5,7 @@ module Main ( main ) where
 
 import           Control.Monad.Trans.Resource (runResourceT)
 import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString.Lazy
 import qualified Data.ByteString.Lazy.Char8 as BL
 import           Data.Function (on)
 import           Data.Functor.Compose (Compose(..))
@@ -12,8 +13,8 @@ import           Data.Functor.Identity
 import qualified Data.IORef as IOR
 import qualified Data.List as L
 import           Data.String (fromString)
-import           Streaming (Of(..))
 import qualified Streaming as SM
+import           Streaming (Of(..))
 import qualified Streaming.ByteString as Q
 import qualified Streaming.ByteString.Char8 as Q8
 import qualified Streaming.ByteString.Internal as QI
@@ -117,6 +118,11 @@ firstI = do
     . Q8.lines                         -- Stream (ByteStream IO) IO ()
     $ Q8.readFile "tests/groupBy.txt"  -- ByteStream IO ()
   l @?= 57
+
+emptyChunks :: Assertion
+emptyChunks = do
+  bs <- Q.toLazy_ $ QI.chunkMap (const mempty) "bar"
+  assertBool "Expected empty chunks" $ Data.ByteString.Lazy.null bs
 
 readIntCases :: Assertion
 readIntCases = do
@@ -384,5 +390,6 @@ main = defaultMain $ testGroup "Tests"
     , testCase "findIndexOrEnd" goodFindIndex
     , testCase "Stream Interop" firstI
     , testCase "readInt" readIntCases
+    , testCase "toLazy_: empty chunks" emptyChunks
     ]
   ]
