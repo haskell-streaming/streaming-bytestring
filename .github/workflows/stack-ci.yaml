@@ -14,6 +14,7 @@ jobs:
       matrix:
         resolver:
           [
+            "lts-23.7",
             "lts-22.36",
             "lts-21.25",
             "lts-20.26",
@@ -26,34 +27,47 @@ jobs:
             "lts-9.21",
           ]
         include:
+          - resolver: "lts-23.7"
+            ghc: "9.8.4"
+            stack-version: latest
           - resolver: "lts-22.36"
             ghc: "9.6.6"
+            stack-version: latest
           - resolver: "lts-21.25"
             ghc: "9.4.8"
+            stack-version: latest
           - resolver: "lts-20.26"
             ghc: "9.2.5"
+            stack-version: latest
           - resolver: "lts-19.33"
             ghc: "9.0.2"
+            stack-version: latest
           - resolver: "lts-18.28"
             ghc: "8.10.7"
+            stack-version: latest
           - resolver: "lts-16.31"
             ghc: "8.8.4"
+            stack-version: latest
           - resolver: "lts-14.27"
             ghc: "8.6.5"
+            stack-version: latest
           - resolver: "lts-12.26"
             ghc: "8.4.4"
+            stack-version: latest
           - resolver: "lts-11.22"
             ghc: "8.2.2"
+            stack-version: "2.15.5"
           - resolver: "lts-9.21"
             ghc: "8.0.2"
+            stack-version: "2.15.5"
 
     steps:
       - name: Setup GHC
-        uses: haskell/actions/setup@v2
+        uses: haskell-actions/setup@v2
         with:
           ghc-version: ${{ matrix.ghc }}
           enable-stack: true
-          stack-version: "latest"
+          stack-version:  ${{ matrix.stack-version }}
 
       - name: Clone project
         uses: actions/checkout@v4
