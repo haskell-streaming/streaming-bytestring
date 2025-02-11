@@ -1,5 +1,11 @@
 # streaming-bytestring
 
+## 0.3.4 (2025-02-11)
+
+#### Changed
+
+- Ensure support for GHC 9.12.
+
 ## 0.3.3 (2024-10-01)
 
 #### Fixed
